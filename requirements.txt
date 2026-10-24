@@ -1,10 +1,20 @@
-# REVERE backend + detector dependencies
+# REVERE dependencies
+# ---------------------------------------------------------------------------
+# Backend + frontend (always needed)
 fastapi>=0.109
 uvicorn[standard]>=0.27
 websockets>=11.0
 python-multipart>=0.0.6
-
-# Detector only (revere_detector.py)
-tensorflow>=2.15
-opencv-python>=4.8
 numpy>=1.24
+opencv-python>=4.8
+
+# ---------------------------------------------------------------------------
+# Current detector: V-JEPA 2  (revere_websocket_new.py)
+#   V-JEPA 2 / AutoVideoProcessor requires transformers >= 4.52 and torch >= 2.1.
+#   Older versions fail with: cannot import name 'AutoVideoProcessor'.
+torch>=2.1
+transformers>=4.52
+
+# ---------------------------------------------------------------------------
+# Legacy detector: TensorFlow CNN  (revere_detector.py) — optional
+# tensorflow>=2.15

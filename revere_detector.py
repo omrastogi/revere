@@ -55,7 +55,13 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 IMAGE_HEIGHT, IMAGE_WIDTH = 64, 64
 WINDOW_SIZE = 30                 # rolling-average window (frames)
 CONFIDENCE_THRESHOLD = 0.6       # min averaged probability to accept a label
-MAX_CLIP_FRAMES = 450            # cap on frames collected per incident
+
+# Clip is a CONTIGUOUS segment: from (first detection - PRE_PAD) to
+# (last detection + POST_PAD), played back at the source's real frame rate.
+PRE_PAD_SECONDS = 3.0            # seconds of context kept before first detection
+POST_PAD_SECONDS = 3.0           # seconds of context kept after last detection
+MAX_BUFFER_SECONDS = 120         # safety cap on how much footage we hold in RAM
+DEFAULT_FPS = 15                 # fallback if the source doesn't report its fps
 
 
 def _find_model():
@@ -103,13 +109,14 @@ def get_date_and_time():
 # --------------------------------------------------------------------------- #
 #  Clip saving + websocket sending
 # --------------------------------------------------------------------------- #
-def save_clip(frames):
+def save_clip(frames, fps=DEFAULT_FPS):
+    """Write a list of frames to CLIP_PATH as webm/VP8 at the given fps."""
     if not frames:
         return False
     height, width, _ = frames[0].shape
     # VP80 (VP8) in a .webm container — this is what browsers can play in <video>.
     fourcc = cv2.VideoWriter_fourcc(*"VP80")
-    writer = cv2.VideoWriter(CLIP_PATH, fourcc, 15, (width, height))
+    writer = cv2.VideoWriter(CLIP_PATH, fourcc, float(fps), (width, height))
     for frame in frames:
         writer.write(frame)
     writer.release()
@@ -164,13 +171,22 @@ class Detector:
     def __init__(self, video_file_path, on_event=None):
         self.video_file_path = video_file_path
         self.video_reader = cv2.VideoCapture(video_file_path)
-        self.frames = []
-        self.frame_count = 0
+
+        # read the source frame rate so the clip plays at real speed
+        src_fps = self.video_reader.get(cv2.CAP_PROP_FPS)
+        self.fps = src_fps if src_fps and src_fps > 1 else DEFAULT_FPS
+        self.max_buffer = int(self.fps * MAX_BUFFER_SECONDS)
+
+        # ring buffer of ALL recent frames (so we can slice a contiguous segment)
+        self.buffer = deque(maxlen=self.max_buffer)   # holds (index, frame)
+        self.first_detect_idx = None                  # index of first crime frame
+        self.last_detect_idx = None                   # index of last crime frame
         self.crime_type = "NA"
-        self.counter = 0
+        self.detect_count = 0
+
         self.is_processing = False
         self.lock = threading.Lock()
-        self.deque = deque(maxlen=WINDOW_SIZE)
+        self.deque = deque(maxlen=WINDOW_SIZE)         # rolling prob window
         self.on_event = on_event or (lambda *a, **k: None)
         self.start_time = time.time()
         self.frames_seen = 0
@@ -184,50 +200,78 @@ class Detector:
 
     def process_video(self):
         src = "camera" if self.video_file_path == 0 else os.path.basename(str(self.video_file_path))
-        self.on_event("start", f"Analysing {src}…")
+        self.on_event("start", f"Analysing {src}… (source {self.fps:.0f} fps)")
 
+        idx = 0
         while self.is_processing:
             status, frame = self.video_reader.read()
             if not status:
                 break
             self.frames_seen += 1
+
+            # keep every frame in the ring buffer, tagged with its index
+            self.buffer.append((idx, frame))
+
             resized = cv2.resize(frame, (IMAGE_HEIGHT, IMAGE_WIDTH))
             normalized = resized / 255.0
-            threading.Thread(target=self.predict, args=(normalized, frame), daemon=True).start()
+            threading.Thread(target=self.predict, args=(normalized, idx), daemon=True).start()
 
             cv2.imshow("REVERE — Live Feed (press q to stop)", frame)
             if cv2.waitKey(1) & 0xFF == ord("q"):
                 break
+            idx += 1
 
         self.is_processing = False
         self.video_reader.release()
         cv2.destroyAllWindows()
         self.on_event("stopped", "Feed ended. Finalising…")
 
-        if save_clip(self.frames):
-            self.on_event("clip", f"Saved clip ({len(self.frames)} frames)")
-            city, locality, coordinates = get_location()
-            date, time_str = get_date_and_time()
-            archive_path = CLIP_PATH
-            try:
-                archive_path = os.path.join(CLIP_DIR, f"{city}_{date}+{time_str}.webm")
-                os.replace(CLIP_PATH, archive_path)
-            except Exception:  # noqa: BLE001
+        segment = self._build_segment()
+        if segment:
+            self.on_event("clip",
+                          f"Clip: {len(segment)} frames (~{len(segment)/self.fps:.1f}s) "
+                          f"with {PRE_PAD_SECONDS:.0f}s/{POST_PAD_SECONDS:.0f}s padding")
+            if save_clip(segment, fps=self.fps):
+                city, locality, coordinates = get_location()
+                date, time_str = get_date_and_time()
                 archive_path = CLIP_PATH
+                try:
+                    archive_path = os.path.join(CLIP_DIR, f"{city}_{date}+{time_str}.webm")
+                    os.replace(CLIP_PATH, archive_path)
+                except Exception:  # noqa: BLE001
+                    archive_path = CLIP_PATH
 
-            self.on_event("sending", f"Streaming '{self.crime_type}' @ {city}/{locality}…")
-            reply = send_detection(self.crime_type, city, locality,
-                                   coordinates, date, time_str, archive_path)
-            if reply:
-                self.on_event("sent", f"Delivered to backend · {self.crime_type} @ {city}")
+                self.on_event("sending", f"Streaming '{self.crime_type}' @ {city}/{locality}…")
+                reply = send_detection(self.crime_type, city, locality,
+                                       coordinates, date, time_str, archive_path)
+                if reply:
+                    self.on_event("sent", f"Delivered to backend · {self.crime_type} @ {city}")
+                else:
+                    self.on_event("error", "Backend unreachable — is the server running?")
             else:
-                self.on_event("error", "Backend unreachable — is the server running?")
+                self.on_event("error", "Failed to write clip.")
         else:
             self.on_event("none", "No incident detected; nothing sent.")
 
         self.on_event("done", f"Done in {time.time() - self.start_time:.1f}s")
 
-    def predict(self, normalized_frame, original_frame):
+    def _build_segment(self):
+        """Slice a contiguous segment: [first_detect - pre_pad, last_detect + post_pad]."""
+        if self.first_detect_idx is None or not self.buffer:
+            return []
+
+        pre = int(self.fps * PRE_PAD_SECONDS)
+        post = int(self.fps * POST_PAD_SECONDS)
+        start_idx = self.first_detect_idx - pre
+        end_idx = self.last_detect_idx + post
+
+        # buffer holds (index, frame); pull every frame whose index is in range.
+        # Frames older than the ring buffer may have been evicted — that's the
+        # MAX_BUFFER_SECONDS safety cap; we just include whatever is still held.
+        segment = [f for (i, f) in self.buffer if start_idx <= i <= end_idx]
+        return segment
+
+    def predict(self, normalized_frame, idx):
         with self.lock:
             probs = model.predict(np.expand_dims(normalized_frame, axis=0), verbose=0)[0]
             self.deque.append(probs)
@@ -236,18 +280,15 @@ class Detector:
                 max_prob = float(np.max(averaged))
                 label = int(np.argmax(averaged))
                 if max_prob > CONFIDENCE_THRESHOLD and label < 10:
-                    self.frame_count += 1
-                    if self.frame_count < MAX_CLIP_FRAMES:
-                        if self.counter == 0:
-                            self.crime_type = CLASSES_LIST[label]
-                            self.counter = 1
-                            self.on_event("detect",
-                                          f"⚠ {self.crime_type} detected ({max_prob*100:.0f}% conf.)")
-                        self.frames.append(original_frame)
-                    elif len(self.frames) > 100:
-                        self.frame_count = 0
-                else:
-                    self.frame_count = 0
+                    self.detect_count += 1
+                    # worker threads may finish out of order -> use min/max
+                    if self.first_detect_idx is None or idx < self.first_detect_idx:
+                        self.first_detect_idx = idx
+                        self.crime_type = CLASSES_LIST[label]
+                        self.on_event("detect",
+                                      f"⚠ {self.crime_type} detected ({max_prob*100:.0f}% conf.)")
+                    if self.last_detect_idx is None or idx > self.last_detect_idx:
+                        self.last_detect_idx = idx
 
 
 # --------------------------------------------------------------------------- #
