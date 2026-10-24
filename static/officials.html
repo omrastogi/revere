@@ -3,207 +3,397 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>REVERE — Officials Dashboard</title>
+<title>Revere — Officials Review</title>
 <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
 <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon.png" />
 <link rel="apple-touch-icon" href="/static/apple-touch-icon.png" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <style>
-  :root{--bg:#0b1220;--panel:#131c2b;--panel2:#1a2538;--line:#243247;--text:#e8eef6;
-        --muted:#8aa0b8;--accent:#60a5fa;--teal:#2dd4bf;--danger:#ef4444;--ok:#22c55e;--warn:#f59e0b;}
-  *{box-sizing:border-box;margin:0;padding:0;font-family:'Segoe UI',system-ui,sans-serif;}
+  :root{
+    /* Same palette as the community page: grey/white with navy (#153D59) */
+    --bg:#f3f4f6; --panel:#ffffff; --panel2:#f6f7f9; --line:#dfe3e8; --rule:#eceff2;
+    --text:#1f2933; --muted:#5f6b7a; --faint:#8a94a1;
+    --navy:#153D59; --navy-dark:#0f2d42; --navy-tint:#e8eef4; --navy-sel:#eef3f8;
+    --low:#2f7d4f; --mid:#b45309; --high:#e8262b;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;font-family:'Inter','Segoe UI',system-ui,sans-serif;border-radius:0;}
   body{background:var(--bg);color:var(--text);}
-  .topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 24px;
-    background:linear-gradient(90deg,#0d1627,#122034);border-bottom:1px solid var(--line);
-    position:sticky;top:0;z-index:50;}
-  .brand{display:flex;align-items:center;gap:10px;font-weight:800;}
-  .brand .eye{width:28px;height:28px;border-radius:50%;background:radial-gradient(circle,#2dd4bf,#0d9488);
-    display:flex;align-items:center;justify-content:center;color:#042;}
-  .brand small{color:var(--muted);font-weight:500;font-size:.72rem;display:block;}
-  .right{display:flex;align-items:center;gap:14px;}
-  .live{display:inline-flex;gap:7px;align-items:center;font-size:.82rem;color:var(--muted);}
-  .live .d{width:8px;height:8px;border-radius:50%;background:#555;}
-  .live .d.on{background:var(--ok);box-shadow:0 0 8px var(--ok);}
-  .btn{padding:8px 14px;border-radius:9px;border:1px solid var(--line);background:var(--panel2);
-    color:var(--text);cursor:pointer;font-weight:600;font-size:.85rem;text-decoration:none;}
-  .btn:hover{border-color:var(--accent);}
-  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;padding:18px 24px;}
-  .kpi{background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:16px 18px;}
-  .kpi .n{font-size:1.8rem;font-weight:800;}
+  a{color:inherit;text-decoration:none;}
+  button{font:inherit;}
+  :focus-visible{outline:2px solid var(--navy);outline-offset:2px;}
+  .icon{width:16px;height:16px;flex-shrink:0;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
+
+  /* ---------- Top bar ---------- */
+  .topbar{display:flex;align-items:center;justify-content:space-between;height:58px;padding:0 24px;
+    background:var(--navy);color:#fff;position:sticky;top:0;z-index:1000;}
+  .left-nav{display:flex;align-items:center;gap:34px;height:100%;}
+  .brand{display:flex;align-items:center;gap:10px;font-size:1.25rem;font-weight:600;letter-spacing:.2px;}
+  .brand .logo{width:32px;height:32px;background:rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center;}
+  .brand .logo .icon{width:20px;height:20px;}
+  .brand .tag{font-size:.62rem;font-weight:600;letter-spacing:.6px;text-transform:uppercase;color:#c9d6e2;
+    border:1px solid rgba(255,255,255,.3);padding:3px 7px;margin-left:4px;}
+  .tabs{display:flex;height:100%;gap:22px;}
+  .tabs a{display:flex;align-items:center;gap:8px;font-size:.88rem;color:#c9d6e2;height:100%;
+    border-bottom:2px solid transparent;padding-top:2px;}
+  .tabs a:hover{color:#fff;}
+  .tabs a[aria-current="page"]{color:#fff;border-bottom-color:#fff;}
+  .right-nav{display:flex;align-items:center;gap:14px;font-size:.84rem;}
+  .ghost-btn{display:flex;align-items:center;gap:6px;padding:7px 12px;border:1px solid rgba(255,255,255,.35);color:#fff;font-size:.82rem;}
+  .ghost-btn:hover{border-color:#fff;background:rgba(255,255,255,.08);}
+  .solid-btn{padding:7px 14px;background:#fff;color:var(--navy);font-weight:600;font-size:.82rem;}
+  .solid-btn:hover{background:#e8eef4;}
+
+  /* ---------- Notice bar ---------- */
+  .notice{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 24px;
+    background:#fff;border-bottom:1px solid var(--line);font-size:.78rem;}
+  .notice .em{display:flex;align-items:center;gap:8px;}
+  .notice .em .icon{color:var(--navy);width:14px;height:14px;}
+  .notice .status{color:var(--navy);font-weight:700;font-size:.7rem;letter-spacing:.5px;text-transform:uppercase;
+    display:flex;align-items:center;gap:6px;}
+  .notice .status .d{width:6px;height:6px;border-radius:50%;background:var(--faint);}
+  .notice .status.live .d{background:#2f9e5f;animation:pulse 1.6s infinite;}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+
+  .page{max-width:1320px;margin:0 auto;padding:26px 24px 40px;}
+
+  /* ---------- Hero ---------- */
+  .hero{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;}
+  .hero h1{font-size:1.65rem;font-weight:700;color:var(--navy-dark);letter-spacing:-.2px;}
+  .hero p{color:var(--muted);margin-top:6px;font-size:.88rem;}
+  .hero .meta{text-align:right;flex-shrink:0;}
+  .pill{display:inline-flex;align-items:center;gap:6px;background:var(--navy-tint);color:var(--navy);
+    font-size:.72rem;font-weight:600;padding:4px 10px;}
+  .pill .d{width:6px;height:6px;border-radius:50%;background:var(--navy);}
+  .hero .stamp{color:var(--muted);font-size:.74rem;margin-top:8px;}
+
+  /* ---------- KPIs ---------- */
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:24px 0 16px;}
+  .kpi{background:#fff;border:1px solid var(--line);padding:16px 18px;}
+  .kpi .n{font-size:1.7rem;font-weight:700;color:var(--navy);}
   .kpi .l{color:var(--muted);font-size:.78rem;margin-top:2px;}
-  .kpi.pending .n{color:var(--warn);} .kpi.verified .n{color:var(--ok);}
-  .layout{display:grid;grid-template-columns:1.6fr 1fr;gap:16px;padding:4px 24px 32px;}
-  .card{background:var(--panel);border:1px solid var(--line);border-radius:15px;overflow:hidden;}
-  .card h3{padding:14px 18px;border-bottom:1px solid var(--line);font-size:.98rem;
+  .kpi.pending{border-top:3px solid var(--mid);} .kpi.pending .n{color:var(--mid);}
+  .kpi.verified{border-top:3px solid var(--low);} .kpi.verified .n{color:var(--low);}
+
+  /* ---------- Layout ---------- */
+  .layout{display:grid;grid-template-columns:1.65fr 1fr;gap:14px;align-items:start;}
+  .card{background:#fff;border:1px solid var(--line);}
+  .card h3{padding:14px 18px;border-bottom:1px solid var(--line);font-size:.92rem;font-weight:700;color:var(--navy-dark);
     display:flex;justify-content:space-between;align-items:center;}
-  .filters{display:flex;gap:8px;flex-wrap:wrap;padding:12px 18px;border-bottom:1px solid var(--line);}
-  .chip{padding:6px 12px;border-radius:999px;border:1px solid var(--line);background:var(--panel2);
-    color:var(--muted);cursor:pointer;font-size:.8rem;}
-  .chip.active{background:var(--accent);border-color:var(--accent);color:#06101f;font-weight:700;}
-  .feed{padding:10px 16px 18px;max-height:72vh;overflow:auto;display:flex;flex-direction:column;gap:12px;}
-  .det{display:grid;grid-template-columns:230px 1fr;gap:14px;background:var(--panel2);
-    border:1px solid var(--line);border-radius:13px;padding:12px;animation:pop .3s ease;}
-  @keyframes pop{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
-  .det video,.det .novid{width:230px;height:150px;border-radius:9px;background:#000;object-fit:cover;}
-  .det .novid{display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:.8rem;}
-  .det .info{display:flex;flex-direction:column;gap:7px;}
-  .det .crime{display:inline-flex;align-items:center;gap:8px;}
-  .det .crime .badge{background:#2a1313;color:#fca5a5;padding:3px 10px;border-radius:7px;font-weight:800;font-size:.85rem;}
-  .det .sev{font-size:.7rem;padding:2px 8px;border-radius:6px;font-weight:700;}
-  .sev.low{background:#0f2a1a;color:var(--ok);} .sev.mid{background:#2a220f;color:var(--warn);} .sev.high{background:#2a1313;color:var(--danger);}
-  .meta{font-size:.84rem;color:var(--muted);line-height:1.6;}
-  .meta b{color:var(--text);}
-  .status{font-size:.72rem;font-weight:700;padding:3px 10px;border-radius:7px;width:fit-content;}
-  .status.pending{background:#2a220f;color:var(--warn);}
-  .status.verified{background:#0f2a1a;color:var(--ok);}
-  .status.dismissed{background:#20232a;color:var(--muted);}
-  .actions{display:flex;gap:8px;margin-top:4px;}
-  .act{padding:7px 14px;border-radius:9px;border:none;cursor:pointer;font-weight:700;font-size:.82rem;}
-  .act.verify{background:var(--ok);color:#042;} .act.dismiss{background:#2b3444;color:#cdd9e8;}
-  .act:hover{filter:brightness(1.08);}
-  .side{display:flex;flex-direction:column;gap:16px;}
-  .hoodrow{display:flex;align-items:center;gap:10px;padding:9px 18px;border-bottom:1px solid #1b2636;}
-  .hoodrow .bar{flex:1;height:7px;border-radius:6px;background:#1b2636;overflow:hidden;}
-  .hoodrow .bar i{display:block;height:100%;}
-  .hoodrow .nm{width:120px;font-size:.88rem;font-weight:600;}
-  .hoodrow .c{width:36px;text-align:right;color:var(--muted);font-size:.8rem;}
-  .empty{color:var(--muted);padding:26px;text-align:center;}
-  @media(max-width:980px){.layout{grid-template-columns:1fr;}.kpis{grid-template-columns:1fr 1fr;}.det{grid-template-columns:1fr;}.det video,.det .novid{width:100%;}}
+  .card h3 small{color:var(--muted);font-weight:500;font-size:.74rem;}
+  .side{display:flex;flex-direction:column;gap:14px;position:sticky;top:72px;}
+
+  /* Status filter (segmented, like Current/Historical on the community page) */
+  .toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 18px;border-bottom:1px solid var(--line);flex-wrap:wrap;}
+  .flabel{color:var(--muted);font-size:.66rem;font-weight:600;text-transform:uppercase;letter-spacing:.5px;}
+  .seg{display:inline-flex;background:#e6e9ed;padding:3px;}
+  .seg button{border:none;background:transparent;color:var(--muted);padding:7px 14px;font-size:.8rem;cursor:pointer;
+    display:flex;align-items:center;gap:6px;}
+  .seg button .c{font-size:.68rem;color:var(--faint);}
+  .seg button[aria-pressed="true"]{background:var(--navy);color:#fff;font-weight:600;}
+  .seg button[aria-pressed="true"] .c{color:#c9d6e2;}
+
+  /* Detection cards */
+  .feed{max-height:calc(100vh - 230px);min-height:420px;overflow:auto;}
+  .det{display:grid;grid-template-columns:240px 1fr;gap:16px;padding:16px 18px;border-bottom:1px solid var(--rule);
+    border-left:3px solid transparent;}
+  .det.fresh{animation:pop .25s ease;}
+  .det.pending{border-left-color:var(--mid);}
+  .det:hover{background:#fafbfc;}
+  @keyframes pop{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+  .det video,.det .novid{width:240px;height:150px;background:#0f1720;object-fit:cover;display:block;}
+  .det .novid{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:#8a94a1;font-size:.74rem;}
+  .det .novid .icon{width:22px;height:22px;}
+  .det .info{display:flex;flex-direction:column;min-width:0;}
+  .det .top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;}
+  .det .title{font-size:1.02rem;font-weight:700;color:var(--navy-dark);}
+  .det .ref{font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:.64rem;color:var(--faint);letter-spacing:.4px;text-transform:uppercase;margin-top:2px;}
+  .chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;}
+  .chip{display:inline-flex;align-items:center;gap:6px;font-size:.7rem;font-weight:600;padding:3px 8px;}
+  .chip .d{width:6px;height:6px;border-radius:50%;background:currentColor;}
+  .chip.pending{background:#fbefdf;color:#8a4f12;}
+  .chip.verified{background:#e6f2ec;color:#2f6f5a;}
+  .chip.dismissed{background:var(--panel2);color:var(--muted);}
+  .chip.low{background:#e6f2ec;color:#2f6f5a;} .chip.mid{background:#fbefdf;color:#8a4f12;} .chip.high{background:#fde6e6;color:#c41d22;}
+  .facts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px 14px;margin-top:12px;}
+  .facts .k{font-size:.6rem;font-weight:600;letter-spacing:.5px;text-transform:uppercase;color:var(--muted);}
+  .facts .v{font-size:.8rem;color:var(--text);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .facts .mono{font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:.74rem;}
+  .actions{display:flex;gap:8px;margin-top:auto;padding-top:12px;}
+  .act{display:flex;align-items:center;gap:6px;padding:8px 14px;border:1px solid var(--line);background:#fff;color:var(--text);
+    cursor:pointer;font-weight:600;font-size:.8rem;}
+  .act .icon{width:14px;height:14px;}
+  .act:hover{border-color:var(--navy);}
+  .act.verify{background:var(--navy);border-color:var(--navy);color:#fff;}
+  .act.verify:hover{background:var(--navy-dark);}
+  .act.undo{border:none;background:none;color:var(--navy);padding:8px 4px;}
+  .act.undo:hover{text-decoration:underline;}
+  .act:disabled{opacity:.5;cursor:wait;}
+
+  /* Neighborhood ranks */
+  .ranklist{max-height:340px;overflow:auto;}
+  .rank{display:flex;align-items:center;gap:12px;padding:10px 18px;border-bottom:1px solid var(--rule);}
+  .rank .bar{flex:1;height:7px;background:var(--rule);overflow:hidden;}
+  .rank .bar i{display:block;height:100%;background:var(--navy);}
+  .rank .hood{width:120px;font-weight:600;font-size:.84rem;}
+  .rank .cnt{width:36px;text-align:right;color:var(--muted);font-size:.78rem;}
+
+  .empty{padding:26px 18px;color:var(--muted);font-size:.84rem;text-align:center;}
+  .foot{padding:20px 24px;color:var(--muted);font-size:.74rem;border-top:1px solid var(--line);text-align:center;background:#fff;}
+
+  @media(max-width:1000px){
+    .layout{grid-template-columns:1fr;} .side{position:static;}
+    .kpis{grid-template-columns:1fr 1fr;}
+    .det{grid-template-columns:1fr;} .det video,.det .novid{width:100%;height:200px;}
+    .facts{grid-template-columns:1fr 1fr;}
+    .tabs,.ghost-btn span.long{display:none;}
+  }
 </style>
 </head>
 <body>
-  <div class="topbar">
-    <div class="brand"><span class="eye">◉</span><div>REVERE <small>Officials Command Center</small></div></div>
-    <div class="right">
-      <span class="live"><span class="d" id="dot"></span><span id="liveText">connecting…</span></span>
-      <a class="btn" href="/" target="_blank">Community view ↗</a>
-      <a class="btn" href="/logout">Logout</a>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-radar" viewBox="0 0 24 24"><circle cx="12" cy="11" r="2"/><path d="M8.5 7.5a5 5 0 0 0 0 7M15.5 7.5a5 5 0 0 1 0 7M5.6 4.6a9 9 0 0 0 0 12.8M18.4 4.6a9 9 0 0 1 0 12.8M12 13v8"/></symbol>
+    <symbol id="i-inbox" viewBox="0 0 24 24"><path d="M3 13l3-8h12l3 8v6H3z"/><path d="M3 13h5l1 3h6l1-3h5"/></symbol>
+    <symbol id="i-map" viewBox="0 0 24 24"><path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z"/><path d="M9 4v14M15 6v14"/></symbol>
+    <symbol id="i-ext" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v6H4V6h6"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+    <symbol id="i-video" viewBox="0 0 24 24"><rect x="3" y="6" width="13" height="12"/><path d="M16 10l5-3v10l-5-3"/></symbol>
+  </svg>
+
+  <header class="topbar">
+    <div class="left-nav">
+      <a href="/officials" class="brand" aria-label="Revere officials home">
+        <span class="logo"><svg class="icon"><use href="#i-radar"/></svg></span>
+        Revere <span class="tag">Officials</span>
+      </a>
+      <nav class="tabs" aria-label="Primary">
+        <a href="#queue" aria-current="page"><svg class="icon"><use href="#i-inbox"/></svg>Review queue</a>
+        <a href="#activity"><svg class="icon"><use href="#i-map"/></svg>Neighborhood activity</a>
+      </nav>
     </div>
+    <div class="right-nav">
+      <a class="ghost-btn" href="/" target="_blank" rel="noopener"><span class="long">Community view</span><svg class="icon"><use href="#i-ext"/></svg></a>
+      <a class="solid-btn" href="/logout">Log out</a>
+    </div>
+  </header>
+
+  <div class="notice" role="note">
+    <span class="em"><svg class="icon"><use href="#i-lock"/></svg>Officials portal · Authorized personnel only. Verified incidents appear on the public map.</span>
+    <span class="status" id="liveStatus"><span class="d"></span><span id="liveText">Connecting…</span></span>
   </div>
 
-  <div class="kpis">
-    <div class="kpi"><div class="n" id="k-total">0</div><div class="l">Total detections</div></div>
-    <div class="kpi pending"><div class="n" id="k-pending">0</div><div class="l">Pending review</div></div>
-    <div class="kpi verified"><div class="n" id="k-verified">0</div><div class="l">Verified</div></div>
-    <div class="kpi"><div class="n" id="k-top">—</div><div class="l">Hotspot neighborhood</div></div>
-  </div>
-
-  <div class="layout">
-    <div class="card">
-      <h3>Live detection feed <span style="color:var(--muted);font-weight:500" id="count">0 shown</span></h3>
-      <div class="filters" id="filters">
-        <span class="chip active" data-f="all">All</span>
-        <span class="chip" data-f="pending">Pending</span>
-        <span class="chip" data-f="verified">Verified</span>
-        <span class="chip" data-f="dismissed">Dismissed</span>
+  <main class="page">
+    <section class="hero">
+      <div>
+        <h1>Review queue.</h1>
+        <p>Watch the clip, check the details, and verify or dismiss each AI detection.</p>
       </div>
-      <div class="feed" id="feed"><div class="empty">Waiting for detections…</div></div>
+      <div class="meta">
+        <span class="pill"><span class="d"></span>Live detections</span>
+        <div class="stamp" id="stamp">—</div>
+      </div>
+    </section>
+
+    <div class="kpis">
+      <div class="kpi"><div class="n" id="k-total">0</div><div class="l">Total detections</div></div>
+      <div class="kpi pending"><div class="n" id="k-pending">0</div><div class="l">Pending review</div></div>
+      <div class="kpi verified"><div class="n" id="k-verified">0</div><div class="l">Verified</div></div>
+      <div class="kpi"><div class="n" id="k-top">—</div><div class="l">Hotspot neighborhood</div></div>
     </div>
 
-    <div class="side">
-      <div class="card">
-        <h3>Neighborhood activity</h3>
-        <div id="hoods"><div class="empty">No data yet.</div></div>
-      </div>
-      <div class="card">
-        <h3>Incidents by type</h3>
-        <div style="padding:16px;"><canvas id="chart" height="200"></canvas></div>
+    <div class="layout">
+      <section class="card" id="queue" aria-labelledby="queueTitle">
+        <h3 id="queueTitle">Live detection feed <small id="count" aria-live="polite">0 shown</small></h3>
+        <div class="toolbar">
+          <span class="flabel" id="statusLabel">Status</span>
+          <div class="seg" role="group" aria-labelledby="statusLabel" id="filters">
+            <button type="button" data-f="all" aria-pressed="false">All <span class="c" data-c="all">0</span></button>
+            <button type="button" data-f="pending" aria-pressed="true">Pending <span class="c" data-c="pending">0</span></button>
+            <button type="button" data-f="verified" aria-pressed="false">Verified <span class="c" data-c="verified">0</span></button>
+            <button type="button" data-f="dismissed" aria-pressed="false">Dismissed <span class="c" data-c="dismissed">0</span></button>
+          </div>
+        </div>
+        <div class="feed" id="feed"><div class="empty">Waiting for detections…</div></div>
+      </section>
+
+      <div class="side">
+        <section class="card" id="activity">
+          <h3>Neighborhood activity <small>all detections</small></h3>
+          <div class="ranklist" id="hoods"><div class="empty">No data yet.</div></div>
+        </section>
+        <section class="card">
+          <h3>Detections by type</h3>
+          <div style="padding:16px;"><canvas id="chart" height="210"></canvas></div>
+        </section>
       </div>
     </div>
-  </div>
+  </main>
+
+  <footer class="foot">
+    Revere officials portal. AI detections require human review; only verified incidents are shown to the public, at approximate locations.
+  </footer>
 
 <script>
-let DETECTIONS = {};   // id -> detection
-let filter = "all";
+const DETECTIONS = {};   // id -> detection
+let filter = "pending";  // review-first default
 let chart;
+const SEEN = new Set();  // ids already rendered once
+let initialized = false; // skip the entrance animation for the initial history load
 
-function sevClass(s){ return s>=8?"high":s>=4?"mid":"low"; }
-function sevColor(i){ return i>=.66?"#ef4444":i>=.33?"#f59e0b":"#22c55e"; }
+// ---------- helpers ----------
+function esc(s){
+  return String(s ?? '').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function fmtDate(dt){ return `${MONTHS[dt.getMonth()]} ${dt.getDate()}`; }
+function fmtTime(dt){
+  let h = dt.getHours(); const ap = h>=12?'PM':'AM'; h = h%12||12;
+  return `${h}:${String(dt.getMinutes()).padStart(2,'0')} ${ap}`;
+}
+function parseIncidentTime(d){            // "2026_10_24" + "18_22_00" -> local Date
+  const m = String(d.date||'').match(/(\d{4})\D(\d{1,2})\D(\d{1,2})/);
+  if(!m) return null;
+  const t = String(d.time||'').match(/(\d{1,2})\D(\d{1,2})(?:\D(\d{1,2}))?/);
+  return new Date(+m[1], +m[2]-1, +m[3], t?+t[1]:0, t?+t[2]:0, t&&t[3]?+t[3]:0);
+}
+function parseReceived(d){                // "2026-10-24 12:14:56" -> Date
+  const m = String(d.received_at||'').match(/(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
+  return m ? new Date(+m[1], +m[2]-1, +m[3], +m[4], +m[5]) : null;
+}
+function level(sev){ if(sev>=8) return 'high'; if(sev>=6) return 'mid'; return 'low'; }
+const LEVEL_TEXT = {high:'High concern', mid:'Moderate', low:'Low concern'};
+const STATUS_TEXT = {pending:'Pending review', verified:'Verified', dismissed:'Dismissed'};
+// Only allow same-origin clip paths into the <video> src.
+function safeClip(u){ return typeof u==='string' && /^\/clips\/[\w.\-]+$/.test(u) ? u : null; }
+
+// ---------- feed ----------
+function cardHtml(d){
+  const clip = safeClip(d.video_url);
+  const media = clip
+    ? `<video src="${esc(clip)}" controls muted loop preload="metadata" aria-label="Detection clip: ${esc(d.crime)}"></video>`
+    : `<div class="novid"><svg class="icon"><use href="#i-video"/></svg>No clip attached</div>`;
+  const at = parseIncidentTime(d), rc = parseReceived(d), lv = level(d.severity);
+  const where = [d.location, d.locality].filter(v=>v && v!=='NA').join(' · ');
+  const st = STATUS_TEXT[d.status] ? d.status : 'pending';
+  const actions = st==='pending'
+    ? `<button type="button" class="act verify" data-act="verified" data-id="${esc(d.id)}"><svg class="icon"><use href="#i-check"/></svg>Verify</button>
+       <button type="button" class="act" data-act="dismissed" data-id="${esc(d.id)}"><svg class="icon"><use href="#i-x"/></svg>Dismiss</button>`
+    : `<button type="button" class="act undo" data-act="pending" data-id="${esc(d.id)}">Move back to pending</button>`;
+  const fresh = !SEEN.has(d.id); SEEN.add(d.id);   // animate only first appearance
+  return `<article class="det ${st}${fresh && initialized ? ' fresh' : ''}">
+    ${media}
+    <div class="info">
+      <div class="top">
+        <div><div class="title">${esc(d.crime)}</div><div class="ref">Detection · ${esc(String(d.id).toUpperCase())}</div></div>
+      </div>
+      <div class="chips">
+        <span class="chip ${st}"><span class="d"></span>${STATUS_TEXT[st]}</span>
+        <span class="chip ${lv}"><span class="d"></span>${LEVEL_TEXT[lv]} · ${esc(d.severity)}/10</span>
+      </div>
+      <div class="facts">
+        <div><div class="k">Neighborhood</div><div class="v">${esc(d.neighborhood)||'—'}</div></div>
+        <div><div class="k">Location</div><div class="v" title="${esc(where)}">${esc(where)||'—'}</div></div>
+        <div><div class="k">Coordinates</div><div class="v mono">${esc(d.coordinates)||'—'}</div></div>
+        <div><div class="k">Reported</div><div class="v">${at?esc(fmtDate(at)+' · '+fmtTime(at)):'—'}</div></div>
+        <div><div class="k">Received</div><div class="v">${rc?esc(fmtTime(rc)):'—'}</div></div>
+      </div>
+      <div class="actions">${actions}</div>
+    </div>
+  </article>`;
+}
 
 function render(){
+  const all = Object.values(DETECTIONS);
+  const counts = {all:all.length, pending:0, verified:0, dismissed:0};
+  all.forEach(d=>{ if(counts[d.status]!==undefined) counts[d.status]++; });
+  document.querySelectorAll('[data-c]').forEach(el=>{ el.textContent = counts[el.dataset.c]; });
+
+  const items = all
+    .filter(d=> filter==='all' || d.status===filter)
+    .sort((a,b)=> String(b.received_at||'').localeCompare(String(a.received_at||'')));
+  document.getElementById('count').textContent = `${items.length} shown`;
   const feed = document.getElementById('feed');
-  let items = Object.values(DETECTIONS).sort((a,b)=> b.received_at.localeCompare(a.received_at));
-  if(filter!=="all") items = items.filter(d=>d.status===filter);
-  document.getElementById('count').textContent = items.length + " shown";
-  if(!items.length){ feed.innerHTML='<div class="empty">No detections match this filter.</div>'; return; }
+  if(!items.length){
+    feed.innerHTML = `<div class="empty">${all.length ? (filter==='pending' ? 'All caught up. No detections waiting for review.' : 'No detections match this filter.') : 'Waiting for detections…'}</div>`;
+    return;
+  }
   feed.innerHTML = items.map(cardHtml).join('');
 }
 
-function cardHtml(d){
-  const media = d.video_url
-    ? `<video src="${d.video_url}" controls muted loop></video>`
-    : `<div class="novid">No video</div>`;
-  return `<div class="det">
-    ${media}
-    <div class="info">
-      <div class="crime"><span class="badge">${d.crime}</span>
-        <span class="sev ${sevClass(d.severity)}">severity ${d.severity}</span></div>
-      <div class="meta">
-        <b>${d.neighborhood}</b> · ${d.location} ${d.locality&&d.locality!=='NA'?('('+d.locality+')'):''}<br>
-        Coords ${d.coordinates} · ${d.date} ${d.time}<br>
-        Received ${d.received_at}
-      </div>
-      <span class="status ${d.status}">${d.status.toUpperCase()}</span>
-      <div class="actions">
-        <button class="act verify" onclick="setStatus('${d.id}','verified')">✓ Verify</button>
-        <button class="act dismiss" onclick="setStatus('${d.id}','dismissed')">✕ Dismiss</button>
-      </div>
-    </div>
-  </div>`;
-}
-
-async function setStatus(id, status){
+async function setStatus(id, status, btn){
+  const prev = DETECTIONS[id] && DETECTIONS[id].status;
+  if(btn) btn.disabled = true;
   const fd = new FormData(); fd.append('status', status);
   try{
-    const r = await fetch(`/api/detections/${id}/status`,{method:'POST',body:fd});
+    const r = await fetch(`/api/detections/${encodeURIComponent(id)}/status`,{method:'POST',body:fd});
     if(r.status===401){ location.href='/login'; return; }
-  }catch(e){ console.error(e); }
-  // optimistic update; server will also broadcast
-  if(DETECTIONS[id]){ DETECTIONS[id].status=status; render(); }
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    if(DETECTIONS[id]){ DETECTIONS[id].status = status; render(); }   // server also broadcasts
+  }catch(e){
+    console.error(e);
+    if(DETECTIONS[id]) DETECTIONS[id].status = prev;
+    if(btn) btn.disabled = false;
+    alert('Could not update this detection. Please try again.');
+  }
 }
 
+document.getElementById('feed').addEventListener('click', e=>{
+  const b = e.target.closest('button[data-act]');
+  if(b) setStatus(b.dataset.id, b.dataset.act, b);
+});
+document.getElementById('filters').addEventListener('click', e=>{
+  const b = e.target.closest('button[data-f]'); if(!b) return;
+  filter = b.dataset.f;
+  document.querySelectorAll('#filters button').forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
+  render();
+});
+
+// ---------- stats ----------
 function renderStats(s){
   document.getElementById('k-total').textContent = s.total;
   document.getElementById('k-pending').textContent = s.pending;
   document.getElementById('k-verified').textContent = s.verified;
   const top = s.neighborhoods.find(h=>h.count>0);
-  document.getElementById('k-top').textContent = top? top.name : '—';
+  document.getElementById('k-top').textContent = top ? top.name : '—';
 
   const active = s.neighborhoods.filter(h=>h.count>0);
   const hoods = document.getElementById('hoods');
-  if(!active.length){ hoods.innerHTML='<div class="empty">No data yet.</div>'; }
+  if(!active.length){ hoods.innerHTML = '<div class="empty">No data yet.</div>'; }
   else{
     const max = Math.max(...active.map(h=>h.score),1);
-    hoods.innerHTML = active.map(h=>{
-      const pct = Math.round(h.score/max*100), col=sevColor(h.intensity);
-      return `<div class="hoodrow"><div class="nm">${h.name}</div>
-        <div class="bar"><i style="width:${pct}%;background:${col}"></i></div>
-        <div class="c">${h.count}</div></div>`;
-    }).join('');
+    hoods.innerHTML = active.map(h=>`<div class="rank">
+        <div class="hood">${esc(h.name)}</div>
+        <div class="bar"><i style="width:${Math.round(h.score/max*100)}%"></i></div>
+        <div class="cnt">${h.count}</div></div>`).join('');
   }
 
-  const labels=Object.keys(s.by_crime), data=Object.values(s.by_crime);
-  const ctx=document.getElementById('chart');
-  if(chart){chart.data.labels=labels;chart.data.datasets[0].data=data;chart.update();}
-  else chart=new Chart(ctx,{type:'bar',data:{labels,datasets:[{data,backgroundColor:'#2dd4bf',borderRadius:6}]},
-    options:{plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#8aa0b8'},grid:{display:false}},y:{ticks:{color:'#8aa0b8'},grid:{color:'#1b2636'}}}}});
+  const labels = Object.keys(s.by_crime), data = Object.values(s.by_crime);
+  if(chart){ chart.data.labels=labels; chart.data.datasets[0].data=data; chart.update(); }
+  else chart = new Chart(document.getElementById('chart'),{
+    type:'bar',
+    data:{labels,datasets:[{data,backgroundColor:'#153D59',borderRadius:0}]},
+    options:{plugins:{legend:{display:false}},
+      scales:{x:{ticks:{color:'#5f6b7a'},grid:{display:false}},
+              y:{ticks:{color:'#5f6b7a',precision:0},grid:{color:'#eceff2'}}}}
+  });
+  const now = new Date();
+  document.getElementById('stamp').textContent = `Updated ${fmtDate(now)}, ${now.getFullYear()} · ${fmtTime(now)}`;
 }
 
-document.getElementById('filters').addEventListener('click',e=>{
-  if(!e.target.dataset.f) return;
-  filter=e.target.dataset.f;
-  document.querySelectorAll('.chip').forEach(c=>c.classList.toggle('active',c===e.target));
-  render();
-});
-
+// ---------- live data ----------
+function setLive(on, text){
+  document.getElementById('liveStatus').classList.toggle('live', on);
+  document.getElementById('liveText').textContent = text;
+}
 function connect(){
-  const proto=location.protocol==='https:'?'wss':'ws';
-  const ws=new WebSocket(`${proto}://${location.host}/ws/dashboard?channel=officials`);
-  ws.onopen=()=>{document.getElementById('dot').classList.add('on');document.getElementById('liveText').textContent='Live';};
-  ws.onclose=()=>{document.getElementById('dot').classList.remove('on');document.getElementById('liveText').textContent='reconnecting…';setTimeout(connect,2000);};
+  const proto = location.protocol==='https:'?'wss':'ws';
+  const ws = new WebSocket(`${proto}://${location.host}/ws/dashboard?channel=officials`);
+  ws.onopen = ()=> setLive(true, 'Live · all detections');
+  ws.onclose= ()=>{ setLive(false, 'Reconnecting…'); setTimeout(connect,2000); };
   ws.onmessage=(e)=>{
-    const m=JSON.parse(e.data);
-    if(m.type==='history'){ m.data.forEach(d=>DETECTIONS[d.id]=d); render(); }
+    const m = JSON.parse(e.data);
+    if(m.type==='history'){ m.data.forEach(d=>DETECTIONS[d.id]=d); render(); initialized = true; }
     else if(m.type==='detection'){ DETECTIONS[m.data.id]=m.data; render(); }
     else if(m.type==='stats'){ renderStats(m.data); }
   };
