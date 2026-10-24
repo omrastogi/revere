@@ -3,87 +3,192 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>REVERE — Officials Login</title>
+<title>Revere — Sign in</title>
 <style>
-  :root{--bg:#0b1220;--panel:#131c2b;--line:#243247;--text:#e8eef6;--muted:#8aa0b8;--accent:#60a5fa;--danger:#ef4444;}
-  *{box-sizing:border-box;margin:0;padding:0;font-family:'Segoe UI',system-ui,sans-serif;}
-  body{background:
-      radial-gradient(1200px 600px at 20% -10%,#15233c 0,transparent 60%),
-      radial-gradient(900px 500px at 100% 0,#0e2a2a 0,transparent 55%),
-      var(--bg);
-    color:var(--text);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;}
-  .wrap{width:100%;max-width:960px;display:grid;grid-template-columns:1.1fr .9fr;
-    background:var(--panel);border:1px solid var(--line);border-radius:20px;overflow:hidden;
-    box-shadow:0 30px 80px rgba(0,0,0,.5);}
-  .left{padding:46px 44px;background:linear-gradient(160deg,#0f1d33,#0c1626);position:relative;}
-  .brand{display:flex;align-items:center;gap:12px;font-weight:800;font-size:1.3rem;}
-  .brand .eye{width:36px;height:36px;border-radius:50%;
-    background:radial-gradient(circle at 50% 50%,#2dd4bf,#0d9488);
-    display:flex;align-items:center;justify-content:center;color:#042;font-size:18px;}
-  .left h2{margin-top:36px;font-size:1.6rem;line-height:1.3;}
-  .left p{color:var(--muted);margin-top:14px;line-height:1.6;}
-  .pts{margin-top:26px;display:flex;flex-direction:column;gap:14px;}
-  .pt{display:flex;gap:12px;align-items:flex-start;font-size:.92rem;color:#cdd9e8;}
-  .pt .ic{width:26px;height:26px;border-radius:8px;background:#13304a;color:#7cc1ff;
-    display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:14px;}
-  .back{position:absolute;bottom:28px;left:44px;color:var(--muted);font-size:.85rem;}
-  .back a{color:var(--accent);text-decoration:none;}
-  .right{padding:46px 44px;display:flex;flex-direction:column;justify-content:center;}
-  .right h3{font-size:1.4rem;}
-  .right .sub{color:var(--muted);margin-top:6px;font-size:.9rem;}
-  form{margin-top:26px;display:flex;flex-direction:column;gap:16px;}
-  label{font-size:.82rem;color:var(--muted);display:block;margin-bottom:6px;}
-  input{width:100%;padding:13px 14px;border-radius:11px;border:1px solid var(--line);
-    background:#0e1726;color:var(--text);font-size:.95rem;outline:none;transition:.15s;}
-  input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(96,165,250,.15);}
-  .submit{margin-top:6px;padding:13px;border:none;border-radius:11px;cursor:pointer;
-    background:linear-gradient(90deg,#60a5fa,#2dd4bf);color:#06101f;font-weight:800;font-size:1rem;}
-  .submit:hover{filter:brightness(1.07);}
-  .err{background:#2a1313;border:1px solid #5b2020;color:#fca5a5;padding:11px 14px;border-radius:10px;font-size:.88rem;}
-  .hint{margin-top:18px;color:var(--muted);font-size:.78rem;border-top:1px dashed var(--line);padding-top:14px;}
-  .hint code{background:#0e1726;padding:2px 7px;border-radius:6px;color:#9fe6da;}
-  @media(max-width:760px){.wrap{grid-template-columns:1fr;}.left{display:none;}}
+  :root{
+    --navy:#163a5c; --navy-dark:#0f2c47; --ink:#1b2a3a; --muted:#6b7a8c;
+    --line:#dde3ea; --bg:#f3f5f6; --white:#fff; --info-bg:#e9f0f7; --danger:#b42318;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:Inter,'Segoe UI',system-ui,-apple-system,sans-serif;color:var(--ink);
+    background:var(--bg);min-height:100vh;display:flex;flex-direction:column;}
+  a{color:var(--navy);}
+
+  /* Top bar */
+  .topbar{height:60px;background:var(--white);border-bottom:1px solid var(--line);
+    display:flex;align-items:center;justify-content:space-between;padding:0 28px;}
+  .brand{display:flex;align-items:center;gap:10px;font-size:1.15rem;color:var(--ink);text-decoration:none;}
+  .brand .logo{width:26px;height:26px;border-radius:6px;background:var(--navy);
+    display:flex;align-items:center;justify-content:center;}
+  .topbar nav a{font-size:.8rem;color:var(--muted);text-decoration:none;}
+  .topbar nav a:hover{color:var(--ink);}
+
+  /* Split layout */
+  .split{flex:1;display:grid;grid-template-columns:47% 53%;}
+
+  .hero{position:relative;color:#fff;padding:36px 36px 28px;display:flex;flex-direction:column;
+    /* Boston skyline photo at static/img/login-hero.jpg, with a navy gradient so the
+       white text stays readable over the bright sky. Solid gradient is the fallback. */
+    background:
+      linear-gradient(180deg,rgba(15,44,71,.55) 0%,rgba(15,44,71,.25) 30%,rgba(15,44,71,.55) 60%,rgba(12,32,54,.95) 100%),
+      url('/static/img/login-hero.jpg') 45% center/cover no-repeat,
+      linear-gradient(160deg,#3b5571 0%,#1d3550 55%,#0e2038 100%);}
+  .eyebrow{display:flex;align-items:center;gap:10px;font-size:.62rem;letter-spacing:.08em;
+    text-transform:uppercase;font-weight:600;}
+  .eyebrow::before{content:"";width:16px;height:1px;background:#fff;}
+  .hero-body{margin-top:auto;}
+  .hero h1{font-size:clamp(1.9rem,3.2vw,2.4rem);font-weight:400;line-height:1.2;max-width:15ch;}
+  .hero p{margin-top:18px;font-size:.88rem;line-height:1.6;color:#dbe4ee;max-width:46ch;}
+  .hero-points{margin-top:18px;padding-top:14px;border-top:1px solid rgba(255,255,255,.25);
+    display:flex;gap:18px;font-size:.72rem;}
+  .hero-points span{display:flex;align-items:center;gap:7px;}
+  .hero-loc{margin-top:14px;font-size:.58rem;letter-spacing:.06em;text-transform:uppercase;color:#b9c6d4;}
+
+  .panel{display:flex;justify-content:center;padding:44px 24px;}
+  .card{width:100%;max-width:406px;}
+  .kicker{font-size:.6rem;letter-spacing:.06em;text-transform:uppercase;color:var(--navy);font-weight:600;}
+  .card h2{margin-top:10px;font-size:1.65rem;font-weight:700;color:var(--ink);}
+  .sub{margin-top:10px;font-size:.78rem;color:var(--muted);}
+
+  form{margin-top:22px;display:flex;flex-direction:column;}
+  label.field{font-size:.74rem;font-weight:600;margin-bottom:8px;display:block;}
+  .input{position:relative;margin-bottom:18px;}
+  .input svg.lead{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:#5b6b7d;}
+  .input input{width:100%;height:36px;padding:0 40px 0 34px;border:1px solid var(--line);border-radius:4px;
+    background:var(--white);font-size:.8rem;color:var(--ink);font-family:inherit;}
+  .input input:focus{outline:none;border-color:var(--navy);box-shadow:0 0 0 3px rgba(22,58,92,.15);}
+  .eye{position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;
+    padding:6px;cursor:pointer;color:#5b6b7d;display:flex;border-radius:4px;}
+  .eye:focus-visible{outline:2px solid var(--navy);}
+
+  .row{display:flex;align-items:center;justify-content:space-between;margin:-2px 0 14px;}
+  .check{display:flex;align-items:center;gap:7px;font-size:.66rem;color:var(--muted);cursor:pointer;}
+  .check input{width:13px;height:13px;accent-color:var(--navy);}
+
+  .submit{height:33px;border:none;border-radius:4px;background:var(--navy);color:#fff;
+    font-size:.72rem;font-weight:600;display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;font-family:inherit;}
+  .submit:hover{background:var(--navy-dark);}
+  .submit:focus-visible{outline:2px solid var(--navy);outline-offset:2px;}
+
+  .err{margin-bottom:14px;padding:9px 12px;border:1px solid #f1c0bb;background:#fdecea;color:var(--danger);
+    border-radius:4px;font-size:.74rem;}
+
+  .back{margin-top:16px;text-align:center;font-size:.72rem;color:var(--muted);}
+  .back a{font-weight:600;text-decoration:none;}
+  .back a:hover{text-decoration:underline;}
+
+  .notice{margin-top:24px;background:var(--info-bg);border-radius:4px;padding:12px 14px;display:flex;gap:10px;}
+  .notice b{font-size:.72rem;font-weight:600;}
+  .notice p{margin-top:4px;font-size:.6rem;line-height:1.55;color:var(--muted);}
+
+  .secure{margin-top:22px;text-align:center;font-size:.6rem;color:var(--muted);
+    display:flex;align-items:center;justify-content:center;gap:6px;}
+  .demo{margin-top:8px;text-align:center;font-size:.6rem;color:var(--muted);}
+  .demo code{background:#e6eaee;padding:1px 5px;border-radius:3px;}
+
+  @media(max-width:820px){
+    .split{grid-template-columns:1fr;}
+    .hero{min-height:280px;}
+  }
 </style>
 </head>
 <body>
-  <div class="wrap">
-    <div class="left">
-      <div class="brand"><span class="eye">◉</span> REVERE</div>
-      <h2>Officials Command Center</h2>
-      <p>Secure access for Boston law-enforcement and emergency response teams to the live AI detection network.</p>
-      <div class="pts">
-        <div class="pt"><span class="ic">⚡</span><div><b>Live detections</b><br><span style="color:var(--muted)">AI-flagged incidents stream in real time with video evidence.</span></div></div>
-        <div class="pt"><span class="ic">✓</span><div><b>Verify &amp; triage</b><br><span style="color:var(--muted)">Confirm or dismiss incidents; verified ones reach the public map.</span></div></div>
-        <div class="pt"><span class="ic">◎</span><div><b>Neighborhood intel</b><br><span style="color:var(--muted)">Severity-weighted activity across every Boston neighborhood.</span></div></div>
-      </div>
-      <div class="back">← <a href="/">Back to community portal</a></div>
-    </div>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="Revere home">
+      <span class="logo" aria-hidden="true">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.9 16.1C1 12.2 1 5.8 4.9 1.9"/><path d="M7.8 4.7a6.14 6.14 0 0 0-.8 7.5"/><circle cx="12" cy="9" r="2"/><path d="M16.2 4.8c2 2 2.26 5.11.8 7.47"/><path d="M19.1 1.9a9.96 9.96 0 0 1 0 14.1"/><path d="M9.5 18h5"/><path d="m8 22 4-11 4 11"/></svg>
+      </span>
+      Revere
+    </a>
+    <nav><a href="/">Community portal</a></nav>
+  </header>
 
-    <div class="right">
-      <h3>Sign in</h3>
-      <div class="sub">Authorized personnel only.</div>
-      <form method="post" action="/login">
-        <div id="errSlot"></div>
-        <div>
-          <label>Username</label>
-          <input name="username" placeholder="officer" autocomplete="username" required />
+  <main class="split">
+    <section class="hero" aria-label="About Revere">
+      <div class="eyebrow">Connected neighbors. Informed communities.</div>
+      <div class="hero-body">
+        <h1>A clearer picture of what’s happening nearby.</h1>
+        <p>Review live detections, verify what’s real, and keep the community map accurate. Together, with context.</p>
+        <div class="hero-points">
+          <span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.1 4.6 9 2 3 4.8v16.4l6-2.8 6 2.6 6-2.8V1.8z"/><path d="M9 2v16.4"/><path d="M15 4.6V21"/></svg>
+            Local perspective
+          </span>
+          <span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 9a2 2 0 0 1-2 2H6l-4 4V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2z"/><path d="M18 9h2a2 2 0 0 1 2 2v11l-4-4h-6a2 2 0 0 1-2-2v-1"/></svg>
+            Community voices
+          </span>
         </div>
-        <div>
-          <label>Password</label>
-          <input name="password" type="password" placeholder="••••••••" autocomplete="current-password" required />
-        </div>
-        <button class="submit" type="submit">Access Dashboard</button>
-      </form>
-      <div class="hint">
-        Demo credentials — <code>officer / boston123</code> or <code>admin / vigilai</code>
+        <div class="hero-loc">Boston, Massachusetts · Our illustrative community</div>
       </div>
-    </div>
-  </div>
+    </section>
+
+    <section class="panel">
+      <div class="card">
+        <div class="kicker">Officials portal</div>
+        <h2>Welcome back.</h2>
+        <p class="sub">Sign in to review live detections and manage incident status.</p>
+
+        <form method="post" action="/login">
+          <div id="errSlot" role="alert"></div>
+
+          <label class="field" for="username">Username</label>
+          <div class="input">
+            <svg class="lead" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
+            <input id="username" name="username" placeholder="officer" autocomplete="username" required />
+          </div>
+
+          <label class="field" for="password">Password</label>
+          <div class="input">
+            <svg class="lead" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+            <input id="password" name="password" type="password" placeholder="••••••••••••" autocomplete="current-password" required />
+            <button type="button" class="eye" id="togglePw" aria-label="Show password" aria-pressed="false">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
+
+          <div class="row">
+            <label class="check"><input type="checkbox" name="remember" value="1" checked /> Remember me</label>
+          </div>
+
+          <button class="submit" type="submit">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+            Sign in
+          </button>
+        </form>
+
+        <p class="back">Not an official? <a href="/">View the community map</a></p>
+
+        <div class="notice">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1b2a3a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/></svg>
+          <div>
+            <b>Need emergency help? Call 911.</b>
+            <p>Revere is a community awareness service, not an emergency dispatch or reporting channel.</p>
+          </div>
+        </div>
+
+        <div class="secure">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+          Authorized personnel only.
+        </div>
+        <p class="demo">Demo credentials: <code>officer / boston123</code> or <code>admin / vigilai</code></p>
+      </div>
+    </section>
+  </main>
+
 <script>
-  if(new URLSearchParams(location.search).get('error')){
+  if (new URLSearchParams(location.search).get('error')) {
     document.getElementById('errSlot').innerHTML =
       '<div class="err">Invalid username or password. Try again.</div>';
   }
+  const pw = document.getElementById('password');
+  const toggle = document.getElementById('togglePw');
+  toggle.addEventListener('click', () => {
+    const show = pw.type === 'password';
+    pw.type = show ? 'text' : 'password';
+    toggle.setAttribute('aria-pressed', String(show));
+    toggle.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+  });
 </script>
 </body>
 </html>

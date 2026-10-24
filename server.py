@@ -337,12 +337,18 @@ async def api_detections(session: Optional[str] = Cookie(None)):
 #  Auth routes
 # --------------------------------------------------------------------------- #
 @app.post("/login")
-async def do_login(username: str = Form(...), password: str = Form(...)):
+async def do_login(
+    username: str = Form(...),
+    password: str = Form(...),
+    remember: Optional[str] = Form(None),
+):
     if OFFICIALS.get(username) == password:
         token = secrets.token_urlsafe(24)
         SESSIONS[token] = username
         resp = RedirectResponse(url="/officials", status_code=303)
-        resp.set_cookie("session", token, httponly=True, samesite="lax")
+        # "Remember me" -> persistent 30-day cookie; otherwise a browser-session cookie.
+        max_age = 60 * 60 * 24 * 30 if remember else None
+        resp.set_cookie("session", token, httponly=True, samesite="lax", max_age=max_age)
         return resp
     return RedirectResponse(url="/login?error=1", status_code=303)
 
