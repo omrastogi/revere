@@ -413,6 +413,19 @@ def get_date_and_time():
     return now.strftime("%Y_%m_%d"), now.strftime("%H_%M_%S")
 
 
+def describe(explanation):
+    """Build a human-readable description from Head C's top dictionary phrases.
+    e.g. 'person fights with another person; weapon drawn' """
+    if not explanation:
+        return ""
+    phrases = []
+    for e in explanation[:2]:
+        p = str(e.get("phrase", "")).strip()
+        if p and p not in phrases:
+            phrases.append(p)
+    return "; ".join(phrases)
+
+
 # --------------------------------------------------------------------------- #
 #  WebSocket sender (thread-safe)
 # --------------------------------------------------------------------------- #
@@ -452,7 +465,8 @@ def _ws_send_blocking(payload, server, result):
         loop.close()
 
 
-def send_detection(crime, city, locality, coordinates, date, time_str, video_path, confidence=None):
+def send_detection(crime, city, locality, coordinates, date, time_str, video_path,
+                   confidence=None, description=None, severity=None, zone=None):
     if websockets is None:
         return None
     payload = {
@@ -461,6 +475,12 @@ def send_detection(crime, city, locality, coordinates, date, time_str, video_pat
     }
     if confidence is not None:
         payload["confidence"] = round(float(confidence), 3)
+    if description:
+        payload["description"] = description
+    if severity is not None:
+        payload["severity"] = severity
+    if zone:
+        payload["zone"] = zone
     if video_path and os.path.exists(video_path):
         try:
             with open(video_path, "rb") as f:
@@ -518,10 +538,15 @@ class FileAnalyzer:
             return
         self.on_event("clip", f"Clip cut: {n} frames (~{n/clip_fps:.1f}s) at {clip_fps:.0f} fps")
 
-        self._deliver(res["crime"], res["max_score"])
+        self._deliver(res)
         self.on_event("done", f"Done in {time.time()-t0:.1f}s")
 
-    def _deliver(self, crime, conf):
+    def _deliver(self, res):
+        crime = res["crime"]
+        conf = res["max_score"]
+        # natural-language description from Head C's top phrases
+        description = describe(res.get("explanation"))
+        severity = res.get("severity")
         city, locality, coordinates = get_location()
         date, time_str = get_date_and_time()
         archive = CLIP_PATH
@@ -531,7 +556,8 @@ class FileAnalyzer:
         except Exception:  # noqa: BLE001
             archive = CLIP_PATH
         self.on_event("sending", f"Streaming '{crime}' @ {city}/{locality}…")
-        reply = send_detection(crime, city, locality, coordinates, date, time_str, archive, conf)
+        reply = send_detection(crime, city, locality, coordinates, date, time_str, archive,
+                               confidence=conf, description=description, severity=severity)
         if reply:
             self.on_event("sent", f"Delivered · {crime} @ {city}")
         else:
@@ -613,7 +639,9 @@ class CameraAnalyzer:
                 archive = CLIP_PATH
             self.on_event("sending", f"Streaming '{res['crime']}' @ {city}/{locality}…")
             reply = send_detection(res["crime"], city, locality, coordinates,
-                                   date, time_str, archive, res["max_score"])
+                                   date, time_str, archive, confidence=res["max_score"],
+                                   description=describe(res.get("explanation")),
+                                   severity=res.get("severity"))
             self.on_event("sent" if reply else "error",
                           f"Delivered · {res['crime']} @ {city}" if reply
                           else "Backend unreachable — is the server running?")

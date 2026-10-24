@@ -114,6 +114,11 @@
   .chip.verified{background:#e6f2ec;color:#2f6f5a;}
   .chip.dismissed{background:var(--panel2);color:var(--muted);}
   .chip.low{background:#e6f2ec;color:#2f6f5a;} .chip.mid{background:#fbefdf;color:#8a4f12;} .chip.high{background:#fde6e6;color:#c41d22;}
+  .chip.conf{background:var(--navy-tint);color:var(--navy);}
+  .desc{margin-top:10px;padding:10px 12px;background:var(--navy-tint);border-left:3px solid var(--navy);
+    font-size:.84rem;color:var(--text);line-height:1.45;}
+  .desc .k{display:block;font-size:.6rem;font-weight:700;letter-spacing:.5px;text-transform:uppercase;
+    color:var(--navy);margin-bottom:3px;}
   .facts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px 14px;margin-top:12px;}
   .facts .k{font-size:.6rem;font-weight:600;letter-spacing:.5px;text-transform:uppercase;color:var(--muted);}
   .facts .v{font-size:.8rem;color:var(--text);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
@@ -290,7 +295,9 @@ function cardHtml(d){
       <div class="chips">
         <span class="chip ${st}"><span class="d"></span>${STATUS_TEXT[st]}</span>
         <span class="chip ${lv}"><span class="d"></span>${LEVEL_TEXT[lv]} · ${esc(d.severity)}/10</span>
+        ${d.confidence!=null?`<span class="chip conf"><span class="d"></span>${Math.round(d.confidence*100)}% conf.</span>`:''}
       </div>
+      ${d.description?`<div class="desc"><span class="k">AI description</span>${esc(d.description)}</div>`:''}
       <div class="facts">
         <div><div class="k">Neighborhood</div><div class="v">${esc(d.neighborhood)||'—'}</div></div>
         <div><div class="k">Location</div><div class="v" title="${esc(where)}">${esc(where)||'—'}</div></div>

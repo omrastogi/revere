@@ -254,9 +254,19 @@ async def _store_detection(payload: Dict) -> Dict:
             print(f"[ingest] clip save failed: {e}")
 
     crime = payload.get("crime", "Unknown")
+    # Prefer the model's own severity (Phase-2 sends 1-5); else map by crime type.
+    try:
+        severity = int(payload["severity"]) if payload.get("severity") is not None \
+            else CRIME_SEVERITY.get(crime, 3)
+    except (TypeError, ValueError):
+        severity = CRIME_SEVERITY.get(crime, 3)
+
     detection = {
         "id": det_id,
         "crime": crime,
+        "description": (payload.get("description") or "").strip(),  # Phase-2 explanation
+        "zone": payload.get("zone", ""),                            # GREEN/YELLOW/RED (Phase-2)
+        "confidence": payload.get("confidence"),                    # 0..1 if provided
         "location": payload.get("location", "NA"),
         "locality": payload.get("locality", "NA"),
         "neighborhood": map_neighborhood(payload),
@@ -266,7 +276,7 @@ async def _store_detection(payload: Dict) -> Dict:
         "video_url": video_url,
         "received_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "status": "pending",   # pending -> verified / dismissed
-        "severity": CRIME_SEVERITY.get(crime, 3),
+        "severity": severity,
     }
     DETECTIONS.append(detection)
     return detection
