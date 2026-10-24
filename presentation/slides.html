@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>REVERE — Pitch Deck</title>
+<style>
+  :root{
+    --navy:#153D59; --navy-dark:#0f2d42; --ink:#1f2933; --muted:#5f6b7a;
+    --bg:#f3f4f6; --white:#fff; --teal:#2dd4bf; --accent:#60a5fa;
+    --low:#2f7d4f; --mid:#b45309; --high:#e8262b;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;font-family:'Inter','Segoe UI',system-ui,sans-serif;}
+  html,body{height:100%;background:#0b0f14;}
+  /* each .slide is one 16:9 frame; scroll or arrow-key through */
+  .deck{display:flex;flex-direction:column;align-items:center;gap:26px;padding:26px;}
+  .slide{
+    width:min(1120px,96vw);aspect-ratio:16/9;background:var(--bg);color:var(--ink);
+    position:relative;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.45);
+    display:flex;flex-direction:column;
+  }
+  .bar{height:10px;background:linear-gradient(90deg,var(--navy),var(--teal));}
+  .pad{flex:1;padding:54px 64px;display:flex;flex-direction:column;justify-content:center;}
+  .kicker{font-size:.95rem;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:var(--navy);}
+  h1{font-size:4.2rem;line-height:1.02;color:var(--navy-dark);letter-spacing:-1px;margin:8px 0;}
+  h2{font-size:2.6rem;line-height:1.1;color:var(--navy-dark);margin:6px 0 18px;}
+  p.lead{font-size:1.5rem;color:var(--muted);line-height:1.4;max-width:900px;}
+  ul{margin:16px 0 0 0;list-style:none;display:flex;flex-direction:column;gap:14px;}
+  li{font-size:1.35rem;color:var(--ink);display:flex;gap:14px;align-items:flex-start;line-height:1.35;}
+  li .b{color:var(--teal);font-weight:900;flex-shrink:0;}
+  .num{position:absolute;bottom:20px;right:28px;color:var(--muted);font-size:.9rem;}
+  .pill{display:inline-flex;align-items:center;gap:9px;background:#e8eef4;color:var(--navy);
+    font-weight:700;font-size:1rem;padding:8px 16px;border-radius:999px;width:fit-content;}
+  .pill .d{width:9px;height:9px;border-radius:50%;background:var(--teal);}
+  .eye{width:70px;height:70px;border-radius:50%;background:radial-gradient(circle,var(--teal),#0d9488);
+    display:flex;align-items:center;justify-content:center;color:#042;font-size:30px;margin-bottom:16px;}
+  /* architecture row */
+  .flow{display:flex;align-items:center;gap:14px;margin-top:26px;flex-wrap:wrap;}
+  .box{background:var(--white);border:2px solid var(--navy);padding:18px 20px;border-radius:0;flex:1;min-width:0;}
+  .box .t{font-weight:800;color:var(--navy-dark);font-size:1.15rem;}
+  .box .s{color:var(--muted);font-size:.95rem;margin-top:4px;}
+  .arrow{color:var(--navy);font-size:1.8rem;font-weight:900;}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:34px;margin-top:10px;}
+  .stat{font-size:3.2rem;font-weight:900;color:var(--navy);}
+  .stat small{display:block;font-size:1.05rem;color:var(--muted);font-weight:600;margin-top:2px;}
+  .dark{background:var(--navy-dark);color:#fff;}
+  .dark .kicker{color:var(--teal);}
+  .dark h1,.dark h2{color:#fff;}
+  .dark p.lead{color:#c9d6e2;}
+  .dark li{color:#e8eef4;}
+  .chips{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px;}
+  .chip{background:#1e4660;color:#dbe7f0;font-weight:600;font-size:1rem;padding:8px 14px;}
+  .hint{text-align:center;color:#6b7785;font-size:.85rem;padding:4px;}
+</style>
+</head>
+<body>
+<div class="hint">Scroll (or ↓) through the slides · press a slide fullscreen with your browser (F11) when screen-recording</div>
+<div class="deck">
+
+  <!-- 0 · COLD OPEN / HOOK -->
+  <section class="slide dark">
+    <div class="bar"></div>
+    <div class="pad">
+      <div class="kicker">March 2026 · Boston</div>
+      <h2 style="font-size:2.2rem;">A student is stabbed outside Northeastern's rec center.</h2>
+      <p class="lead">The first safety alert reaches campus <b style="color:#fff;">47 minutes</b> later.
+        The cameras were already watching — the information just wasn't moving.</p>
+      <p style="color:#8ba0b4;font-size:.85rem;margin-top:26px;">Sources: CBS Boston · Boston.com / The Huntington News</p>
+    </div>
+    <div class="num">1</div>
+  </section>
+
+  <!-- 1 · SCALE + TITLE -->
+  <section class="slide">
+    <div class="bar"></div>
+    <div class="pad">
+      <div class="eye">◉</div>
+      <div class="kicker">~1,200 cameras already watching Boston</div>
+      <h1>REVERE</h1>
+      <p class="lead">Boston PD runs roughly <b>1,200 public cameras</b> that record everything
+        and understand nothing. Revere sits on top of the cameras the city already has —
+        and turns them into real-time safety intelligence.</p>
+      <p style="color:#8a94a1;font-size:.82rem;margin-top:20px;">Camera count: Boston Globe (2024) ~1,300 · ACLU/City report 1,153 (Jul 2024)</p>
+    </div>
+    <div class="num">2</div>
+  </section>
+
+  <!-- 2 · WHAT IT IS -->
+  <section class="slide">
+    <div class="bar"></div>
+    <div class="pad">
+      <div class="kicker">The idea</div>
+      <h2>One AI detector. Two audiences.</h2>
+      <ul>
+        <li><span class="b">▸</span><b>Residents</b> &nbsp;see a live crime map of Boston neighborhoods — Roxbury, Dorchester, Mattapan — no login.</li>
+        <li><span class="b">▸</span><b>Officials</b> &nbsp;review every AI detection with its clip and verify or dismiss it.</li>
+        <li><span class="b">▸</span><b>Privacy by design</b> &nbsp;— only human-verified incidents ever reach the public.</li>
+      </ul>
+    </div>
+    <div class="num">3</div>
+  </section>
+
+  <!-- 3 · ARCHITECTURE -->
+  <section class="slide">
+    <div class="bar"></div>
+    <div class="pad">
+      <div class="kicker">How it works</div>
+      <h2>Detect → stream → review → publish</h2>
+      <div class="flow">
+        <div class="box"><div class="t">V-JEPA 2 detector</div><div class="s">flags the crime + cuts a clip</div></div>
+        <div class="arrow">→</div>
+        <div class="box"><div class="t">FastAPI + WebSocket</div><div class="s">scores, maps to a neighborhood</div></div>
+        <div class="arrow">→</div>
+        <div class="box"><div class="t">Officials review</div><div class="s">verify / dismiss</div></div>
+        <div class="arrow">→</div>
+        <div class="box"><div class="t">Public map</div><div class="s">verified only</div></div>
+      </div>
+      <p class="lead" style="font-size:1.15rem;margin-top:26px;">
+        Runs over the network — a detector on any PC streams to the backend with just an IP.</p>
+    </div>
+    <div class="num">4</div>
+  </section>
+
+  <!-- 4 · DEMO MARKER -->
+  <section class="slide dark">
+    <div class="bar"></div>
+    <div class="pad" style="align-items:center;text-align:center;">
+      <div class="pill"><span class="d"></span>LIVE DEMO</div>
+      <h1 style="margin-top:22px;">Let's see it.</h1>
+      <p class="lead">Detector flags an incident → it appears on the officials dashboard →
+        one click verifies it → the public map updates live.</p>
+    </div>
+    <div class="num">5</div>
+  </section>
+
+  <!-- 5 · BUILT WITH KIRO -->
+  <section class="slide">
+    <div class="bar"></div>
+    <div class="pad">
+      <div class="kicker">Built with Kiro</div>
+      <h2>Kiro was our whole dev environment.</h2>
+      <ul>
+        <li><span class="b">▸</span>Read an inherited, broken codebase and <b>explained it before editing</b>.</li>
+        <li><span class="b">▸</span>Found &amp; fixed real bugs — caught unplayable clips and <b>verified the fix with ffprobe</b>.</li>
+        <li><span class="b">▸</span><b>Spec-driven security</b>: locked down officials auth with testable criteria.</li>
+        <li><span class="b">▸</span><b>Hooks, steering, Figma MCP</b> kept quality and design consistent as we moved fast.</li>
+      </ul>
+    </div>
+    <div class="num">6</div>
+  </section>
+
+  <!-- 6 · IMPACT / CLOSE -->
+  <section class="slide dark">
+    <div class="bar"></div>
+    <div class="pad">
+      <div class="kicker">Why it matters</div>
+      <h2>Faster awareness. Safer neighborhoods.</h2>
+      <div class="two">
+        <div><div class="stat">0.95<small>video ROC AUC — crime vs normal (UCF-Crime)</small></div></div>
+        <div><div class="stat">Real-time<small>clip + location streamed the moment it's flagged</small></div></div>
+      </div>
+      <div class="chips">
+        <span class="chip">V-JEPA 2 + MIL</span>
+        <span class="chip">FastAPI · WebSockets</span>
+        <span class="chip">Leaflet · Chart.js</span>
+        <span class="chip">Built with Kiro</span>
+      </div>
+      <p class="lead" style="margin-top:24px;font-size:1.3rem;"><b style="color:#fff;">REVERE</b> — see it, verify it, prevent it.</p>
+    </div>
+    <div class="num">7</div>
+  </section>
+
+</div>
+<script>
+  // arrow-key navigation: scroll one slide at a time
+  const slides=[...document.querySelectorAll('.slide')]; let i=0;
+  addEventListener('keydown',e=>{
+    if(e.key==='ArrowDown'||e.key==='ArrowRight'||e.key===' '){i=Math.min(i+1,slides.length-1);slides[i].scrollIntoView({behavior:'smooth'});e.preventDefault();}
+    if(e.key==='ArrowUp'||e.key==='ArrowLeft'){i=Math.max(i-1,0);slides[i].scrollIntoView({behavior:'smooth'});e.preventDefault();}
+  });
+</script>
+</body>
+</html>

@@ -19,6 +19,9 @@ Thumbs.db
 .vscode/
 .idea/
 
+# Office temporary lock files (created while a doc is open)
+~$*
+
 # Videos — never commit (example clips + annotated outputs stay local)
 *.mp4
 *.avi
