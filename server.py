@@ -139,6 +139,7 @@ def public_view(d: Dict) -> Dict:
         "neighborhood": d["neighborhood"],
         "date": d["date"],
         "time": d["time"],
+        "received_at": d.get("received_at", ""),
         "severity": d["severity"],
         "status": d["status"],
     }
