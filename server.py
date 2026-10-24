@@ -31,7 +31,7 @@ from datetime import datetime
 from typing import Dict, List, Optional, Set
 
 from fastapi import Cookie, FastAPI, Form, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 # --------------------------------------------------------------------------- #
@@ -322,6 +322,13 @@ async def set_status(det_id: str, status: str = Form(...), session: Optional[str
 # --------------------------------------------------------------------------- #
 #  REST
 # --------------------------------------------------------------------------- #
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    # Browsers request /favicon.ico automatically, so every page (including ones
+    # without an explicit <link rel="icon">) gets the Revere logo.
+    return FileResponse(os.path.join(STATIC_DIR, "favicon.png"), media_type="image/png")
+
+
 @app.get("/api/stats")
 async def api_stats():
     return JSONResponse(compute_stats())
