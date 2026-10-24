@@ -30,9 +30,9 @@
     background:var(--navy);color:#fff;position:sticky;top:0;z-index:1000;}
   .left-nav{display:flex;align-items:center;gap:34px;height:100%;}
   .brand{display:flex;align-items:center;gap:10px;font-size:1.25rem;font-weight:600;letter-spacing:.2px;}
-  .brand .logo{width:32px;height:32px;border-radius:0;background:rgba(255,255,255,.12);
-    display:flex;align-items:center;justify-content:center;}
-  .brand .logo .icon{width:20px;height:20px;}
+  .brand .logo{width:32px;height:32px;border-radius:7px;background:rgba(255,255,255,.14);
+    display:flex;align-items:center;justify-content:center;color:#fff;}
+  .brand .logo .icon{width:19px;height:19px;stroke-width:2;}
   .tabs{display:flex;height:100%;gap:22px;}
   .tabs a{display:flex;align-items:center;gap:8px;font-size:.88rem;color:#c9d6e2;height:100%;
     border-bottom:2px solid transparent;padding-top:2px;}
@@ -259,7 +259,8 @@
 <body>
   <!-- Inline icon sprite -->
   <svg width="0" height="0" style="position:absolute" aria-hidden="true">
-    <symbol id="i-radar" viewBox="0 0 24 24"><circle cx="12" cy="11" r="2"/><path d="M8.5 7.5a5 5 0 0 0 0 7M15.5 7.5a5 5 0 0 1 0 7M5.6 4.6a9 9 0 0 0 0 12.8M18.4 4.6a9 9 0 0 1 0 12.8M12 13v8"/></symbol>
+    <!-- Brand mark: broadcast tower (matches the login page logo) -->
+    <symbol id="i-radar" viewBox="0 0 24 24"><path d="M4.9 16.1C1 12.2 1 5.8 4.9 1.9"/><path d="M7.8 4.7a6.14 6.14 0 0 0-.8 7.5"/><circle cx="12" cy="9" r="2"/><path d="M16.2 4.8c2 2 2.26 5.11.8 7.47"/><path d="M19.1 1.9a9.96 9.96 0 0 1 0 14.1"/><path d="M9.5 18h5"/><path d="m8 22 4-11 4 11"/></symbol>
     <symbol id="i-chat" viewBox="0 0 24 24"><path d="M4 5h11v8H8l-4 3z"/><path d="M15 9h5v8l-3-2h-6v-2"/></symbol>
     <symbol id="i-map" viewBox="0 0 24 24"><path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z"/><path d="M9 4v14M15 6v14"/></symbol>
     <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></symbol>
