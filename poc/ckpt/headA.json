@@ -1,0 +1,16 @@
+{
+ "cfg": {
+  "loss": "topk_bce",
+  "k": 5,
+  "lr": 0.001,
+  "aug": 1
+ },
+ "seed": 2,
+ "arch": "1024-512-1 relu dropout0.6 sigmoid",
+ "video_score": "max over 32 segments",
+ "segments": 32,
+ "frames_per_segment": 16,
+ "fps": 7.5,
+ "size": 224,
+ "model": "facebook/vjepa2-vitl-fpc64-256"
+}

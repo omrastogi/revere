@@ -1,0 +1,20 @@
+{
+ "cfg": {
+  "labels": "grouped",
+  "imb": "sampler",
+  "k": 3,
+  "lr": 0.001,
+  "aug": 1
+ },
+ "seed": 0,
+ "classes": [
+  "Theft",
+  "Violence",
+  "FireExplosion",
+  "RoadAccidents",
+  "Vandalism",
+  "Arrest"
+ ],
+ "arch": "1024-256-C relu dropout0.5",
+ "input": "mean of top-k segments ranked by headA (k=cfg.k)"
+}

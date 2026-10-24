@@ -18,3 +18,10 @@ clips/*
 Thumbs.db
 .vscode/
 .idea/
+
+# Videos — never commit (example clips + annotated outputs stay local)
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.webm

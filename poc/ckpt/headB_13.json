@@ -1,0 +1,27 @@
+{
+ "cfg": {
+  "labels": "13",
+  "imb": "wce",
+  "k": 5,
+  "lr": 0.0005,
+  "aug": 0
+ },
+ "seed": 0,
+ "classes": [
+  "Abuse",
+  "Arrest",
+  "Arson",
+  "Assault",
+  "Burglary",
+  "Explosion",
+  "Fighting",
+  "RoadAccidents",
+  "Robbery",
+  "Shooting",
+  "Shoplifting",
+  "Stealing",
+  "Vandalism"
+ ],
+ "arch": "1024-256-C relu dropout0.5",
+ "input": "mean of top-k segments ranked by headA (k=cfg.k)"
+}
