@@ -1,0 +1,16 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Check page scripts on save",
+      "trigger": "PostFileSave",
+      "description": "Syntax-checks the inline JavaScript in every static HTML page whenever one is saved, so a broken page script is caught before anyone reloads the browser.",
+      "matcher": "static/.*\\.html$",
+      "action": {
+        "type": "command",
+        "command": ".venv/bin/python scripts/check_page_scripts.py",
+        "timeout": 30
+      }
+    }
+  ]
+}
