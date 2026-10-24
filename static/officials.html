@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>REVERE — Officials Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root{--bg:#0b1220;--panel:#131c2b;--panel2:#1a2538;--line:#243247;--text:#e8eef6;
+        --muted:#8aa0b8;--accent:#60a5fa;--teal:#2dd4bf;--danger:#ef4444;--ok:#22c55e;--warn:#f59e0b;}
+  *{box-sizing:border-box;margin:0;padding:0;font-family:'Segoe UI',system-ui,sans-serif;}
+  body{background:var(--bg);color:var(--text);}
+  .topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 24px;
+    background:linear-gradient(90deg,#0d1627,#122034);border-bottom:1px solid var(--line);
+    position:sticky;top:0;z-index:50;}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:800;}
+  .brand .eye{width:28px;height:28px;border-radius:50%;background:radial-gradient(circle,#2dd4bf,#0d9488);
+    display:flex;align-items:center;justify-content:center;color:#042;}
+  .brand small{color:var(--muted);font-weight:500;font-size:.72rem;display:block;}
+  .right{display:flex;align-items:center;gap:14px;}
+  .live{display:inline-flex;gap:7px;align-items:center;font-size:.82rem;color:var(--muted);}
+  .live .d{width:8px;height:8px;border-radius:50%;background:#555;}
+  .live .d.on{background:var(--ok);box-shadow:0 0 8px var(--ok);}
+  .btn{padding:8px 14px;border-radius:9px;border:1px solid var(--line);background:var(--panel2);
+    color:var(--text);cursor:pointer;font-weight:600;font-size:.85rem;text-decoration:none;}
+  .btn:hover{border-color:var(--accent);}
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;padding:18px 24px;}
+  .kpi{background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:16px 18px;}
+  .kpi .n{font-size:1.8rem;font-weight:800;}
+  .kpi .l{color:var(--muted);font-size:.78rem;margin-top:2px;}
+  .kpi.pending .n{color:var(--warn);} .kpi.verified .n{color:var(--ok);}
+  .layout{display:grid;grid-template-columns:1.6fr 1fr;gap:16px;padding:4px 24px 32px;}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:15px;overflow:hidden;}
+  .card h3{padding:14px 18px;border-bottom:1px solid var(--line);font-size:.98rem;
+    display:flex;justify-content:space-between;align-items:center;}
+  .filters{display:flex;gap:8px;flex-wrap:wrap;padding:12px 18px;border-bottom:1px solid var(--line);}
+  .chip{padding:6px 12px;border-radius:999px;border:1px solid var(--line);background:var(--panel2);
+    color:var(--muted);cursor:pointer;font-size:.8rem;}
+  .chip.active{background:var(--accent);border-color:var(--accent);color:#06101f;font-weight:700;}
+  .feed{padding:10px 16px 18px;max-height:72vh;overflow:auto;display:flex;flex-direction:column;gap:12px;}
+  .det{display:grid;grid-template-columns:230px 1fr;gap:14px;background:var(--panel2);
+    border:1px solid var(--line);border-radius:13px;padding:12px;animation:pop .3s ease;}
+  @keyframes pop{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .det video,.det .novid{width:230px;height:150px;border-radius:9px;background:#000;object-fit:cover;}
+  .det .novid{display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:.8rem;}
+  .det .info{display:flex;flex-direction:column;gap:7px;}
+  .det .crime{display:inline-flex;align-items:center;gap:8px;}
+  .det .crime .badge{background:#2a1313;color:#fca5a5;padding:3px 10px;border-radius:7px;font-weight:800;font-size:.85rem;}
+  .det .sev{font-size:.7rem;padding:2px 8px;border-radius:6px;font-weight:700;}
+  .sev.low{background:#0f2a1a;color:var(--ok);} .sev.mid{background:#2a220f;color:var(--warn);} .sev.high{background:#2a1313;color:var(--danger);}
+  .meta{font-size:.84rem;color:var(--muted);line-height:1.6;}
+  .meta b{color:var(--text);}
+  .status{font-size:.72rem;font-weight:700;padding:3px 10px;border-radius:7px;width:fit-content;}
+  .status.pending{background:#2a220f;color:var(--warn);}
+  .status.verified{background:#0f2a1a;color:var(--ok);}
+  .status.dismissed{background:#20232a;color:var(--muted);}
+  .actions{display:flex;gap:8px;margin-top:4px;}
+  .act{padding:7px 14px;border-radius:9px;border:none;cursor:pointer;font-weight:700;font-size:.82rem;}
+  .act.verify{background:var(--ok);color:#042;} .act.dismiss{background:#2b3444;color:#cdd9e8;}
+  .act:hover{filter:brightness(1.08);}
+  .side{display:flex;flex-direction:column;gap:16px;}
+  .hoodrow{display:flex;align-items:center;gap:10px;padding:9px 18px;border-bottom:1px solid #1b2636;}
+  .hoodrow .bar{flex:1;height:7px;border-radius:6px;background:#1b2636;overflow:hidden;}
+  .hoodrow .bar i{display:block;height:100%;}
+  .hoodrow .nm{width:120px;font-size:.88rem;font-weight:600;}
+  .hoodrow .c{width:36px;text-align:right;color:var(--muted);font-size:.8rem;}
+  .empty{color:var(--muted);padding:26px;text-align:center;}
+  @media(max-width:980px){.layout{grid-template-columns:1fr;}.kpis{grid-template-columns:1fr 1fr;}.det{grid-template-columns:1fr;}.det video,.det .novid{width:100%;}}
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand"><span class="eye">◉</span><div>REVERE <small>Officials Command Center</small></div></div>
+    <div class="right">
+      <span class="live"><span class="d" id="dot"></span><span id="liveText">connecting…</span></span>
+      <a class="btn" href="/" target="_blank">Community view ↗</a>
+      <a class="btn" href="/logout">Logout</a>
+    </div>
+  </div>
+
+  <div class="kpis">
+    <div class="kpi"><div class="n" id="k-total">0</div><div class="l">Total detections</div></div>
+    <div class="kpi pending"><div class="n" id="k-pending">0</div><div class="l">Pending review</div></div>
+    <div class="kpi verified"><div class="n" id="k-verified">0</div><div class="l">Verified</div></div>
+    <div class="kpi"><div class="n" id="k-top">—</div><div class="l">Hotspot neighborhood</div></div>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <h3>Live detection feed <span style="color:var(--muted);font-weight:500" id="count">0 shown</span></h3>
+      <div class="filters" id="filters">
+        <span class="chip active" data-f="all">All</span>
+        <span class="chip" data-f="pending">Pending</span>
+        <span class="chip" data-f="verified">Verified</span>
+        <span class="chip" data-f="dismissed">Dismissed</span>
+      </div>
+      <div class="feed" id="feed"><div class="empty">Waiting for detections…</div></div>
+    </div>
+
+    <div class="side">
+      <div class="card">
+        <h3>Neighborhood activity</h3>
+        <div id="hoods"><div class="empty">No data yet.</div></div>
+      </div>
+      <div class="card">
+        <h3>Incidents by type</h3>
+        <div style="padding:16px;"><canvas id="chart" height="200"></canvas></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+let DETECTIONS = {};   // id -> detection
+let filter = "all";
+let chart;
+
+function sevClass(s){ return s>=8?"high":s>=4?"mid":"low"; }
+function sevColor(i){ return i>=.66?"#ef4444":i>=.33?"#f59e0b":"#22c55e"; }
+
+function render(){
+  const feed = document.getElementById('feed');
+  let items = Object.values(DETECTIONS).sort((a,b)=> b.received_at.localeCompare(a.received_at));
+  if(filter!=="all") items = items.filter(d=>d.status===filter);
+  document.getElementById('count').textContent = items.length + " shown";
+  if(!items.length){ feed.innerHTML='<div class="empty">No detections match this filter.</div>'; return; }
+  feed.innerHTML = items.map(cardHtml).join('');
+}
+
+function cardHtml(d){
+  const media = d.video_url
+    ? `<video src="${d.video_url}" controls muted loop></video>`
+    : `<div class="novid">No video</div>`;
+  return `<div class="det">
+    ${media}
+    <div class="info">
+      <div class="crime"><span class="badge">${d.crime}</span>
+        <span class="sev ${sevClass(d.severity)}">severity ${d.severity}</span></div>
+      <div class="meta">
+        <b>${d.neighborhood}</b> · ${d.location} ${d.locality&&d.locality!=='NA'?('('+d.locality+')'):''}<br>
+        Coords ${d.coordinates} · ${d.date} ${d.time}<br>
+        Received ${d.received_at}
+      </div>
+      <span class="status ${d.status}">${d.status.toUpperCase()}</span>
+      <div class="actions">
+        <button class="act verify" onclick="setStatus('${d.id}','verified')">✓ Verify</button>
+        <button class="act dismiss" onclick="setStatus('${d.id}','dismissed')">✕ Dismiss</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+async function setStatus(id, status){
+  const fd = new FormData(); fd.append('status', status);
+  try{
+    const r = await fetch(`/api/detections/${id}/status`,{method:'POST',body:fd});
+    if(r.status===401){ location.href='/login'; return; }
+  }catch(e){ console.error(e); }
+  // optimistic update; server will also broadcast
+  if(DETECTIONS[id]){ DETECTIONS[id].status=status; render(); }
+}
+
+function renderStats(s){
+  document.getElementById('k-total').textContent = s.total;
+  document.getElementById('k-pending').textContent = s.pending;
+  document.getElementById('k-verified').textContent = s.verified;
+  const top = s.neighborhoods.find(h=>h.count>0);
+  document.getElementById('k-top').textContent = top? top.name : '—';
+
+  const active = s.neighborhoods.filter(h=>h.count>0);
+  const hoods = document.getElementById('hoods');
+  if(!active.length){ hoods.innerHTML='<div class="empty">No data yet.</div>'; }
+  else{
+    const max = Math.max(...active.map(h=>h.score),1);
+    hoods.innerHTML = active.map(h=>{
+      const pct = Math.round(h.score/max*100), col=sevColor(h.intensity);
+      return `<div class="hoodrow"><div class="nm">${h.name}</div>
+        <div class="bar"><i style="width:${pct}%;background:${col}"></i></div>
+        <div class="c">${h.count}</div></div>`;
+    }).join('');
+  }
+
+  const labels=Object.keys(s.by_crime), data=Object.values(s.by_crime);
+  const ctx=document.getElementById('chart');
+  if(chart){chart.data.labels=labels;chart.data.datasets[0].data=data;chart.update();}
+  else chart=new Chart(ctx,{type:'bar',data:{labels,datasets:[{data,backgroundColor:'#2dd4bf',borderRadius:6}]},
+    options:{plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#8aa0b8'},grid:{display:false}},y:{ticks:{color:'#8aa0b8'},grid:{color:'#1b2636'}}}}});
+}
+
+document.getElementById('filters').addEventListener('click',e=>{
+  if(!e.target.dataset.f) return;
+  filter=e.target.dataset.f;
+  document.querySelectorAll('.chip').forEach(c=>c.classList.toggle('active',c===e.target));
+  render();
+});
+
+function connect(){
+  const proto=location.protocol==='https:'?'wss':'ws';
+  const ws=new WebSocket(`${proto}://${location.host}/ws/dashboard?channel=officials`);
+  ws.onopen=()=>{document.getElementById('dot').classList.add('on');document.getElementById('liveText').textContent='Live';};
+  ws.onclose=()=>{document.getElementById('dot').classList.remove('on');document.getElementById('liveText').textContent='reconnecting…';setTimeout(connect,2000);};
+  ws.onmessage=(e)=>{
+    const m=JSON.parse(e.data);
+    if(m.type==='history'){ m.data.forEach(d=>DETECTIONS[d.id]=d); render(); }
+    else if(m.type==='detection'){ DETECTIONS[m.data.id]=m.data; render(); }
+    else if(m.type==='stats'){ renderStats(m.data); }
+  };
+}
+connect();
+</script>
+</body>
+</html>

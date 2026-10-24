@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>REVERE — Boston Community Safety</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#0b1220; --panel:#131c2b; --panel2:#1a2538; --line:#243247;
+    --text:#e8eef6; --muted:#8aa0b8; --accent:#2dd4bf; --accent2:#60a5fa;
+    --low:#22c55e; --mid:#f59e0b; --high:#ef4444;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;font-family:'Segoe UI',system-ui,sans-serif;}
+  body{background:var(--bg);color:var(--text);}
+  a{color:inherit;text-decoration:none;}
+  .topbar{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:16px 28px;background:linear-gradient(90deg,#0d1627,#122034);
+    border-bottom:1px solid var(--line);position:sticky;top:0;z-index:500;
+  }
+  .brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:1.25rem;letter-spacing:.3px;}
+  .brand .eye{width:30px;height:30px;border-radius:50%;
+    background:radial-gradient(circle at 50% 50%,var(--accent),#0d9488);
+    display:flex;align-items:center;justify-content:center;font-size:16px;color:#042;}
+  .brand small{color:var(--muted);font-weight:500;font-size:.72rem;display:block;}
+  .nav{display:flex;gap:10px;align-items:center;}
+  .btn{padding:9px 18px;border-radius:10px;border:1px solid var(--line);
+    background:var(--panel2);color:var(--text);cursor:pointer;font-weight:600;font-size:.9rem;transition:.15s;}
+  .btn:hover{border-color:var(--accent2);}
+  .btn.primary{background:var(--accent2);border-color:var(--accent2);color:#06101f;}
+  .hero{padding:36px 28px 10px;}
+  .hero h1{font-size:2rem;font-weight:800;}
+  .hero p{color:var(--muted);margin-top:6px;max-width:680px;line-height:1.5;}
+  .live-pill{display:inline-flex;align-items:center;gap:7px;margin-top:14px;
+    background:#0f1d16;border:1px solid #1f7a4d;color:#4ade80;padding:5px 12px;border-radius:999px;font-size:.8rem;}
+  .live-pill .d{width:8px;height:8px;border-radius:50%;background:#4ade80;box-shadow:0 0 8px #4ade80;animation:pulse 1.6s infinite;}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;padding:20px 28px;}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px;}
+  .stat .n{font-size:2rem;font-weight:800;}
+  .stat .l{color:var(--muted);font-size:.82rem;margin-top:2px;}
+  .grid{display:grid;grid-template-columns:1.4fr 1fr;gap:18px;padding:8px 28px 40px;}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;overflow:hidden;}
+  .card h3{padding:16px 20px;border-bottom:1px solid var(--line);font-size:1rem;font-weight:700;
+    display:flex;justify-content:space-between;align-items:center;}
+  .card h3 small{color:var(--muted);font-weight:500;}
+  #map{height:460px;width:100%;}
+  .leaflet-container{background:#0a1018;}
+  /* Make the free OSM tiles look dark to match the UI (pure CSS, no key). */
+  .leaflet-tile-pane{filter:invert(1) hue-rotate(185deg) brightness(.92) contrast(.9);}
+  .ranklist{padding:8px 0;max-height:460px;overflow:auto;}
+  .rank{display:flex;align-items:center;gap:12px;padding:11px 20px;border-bottom:1px solid #1b2636;}
+  .rank:hover{background:var(--panel2);}
+  .rank .bar{flex:1;height:8px;border-radius:6px;background:#1b2636;overflow:hidden;}
+  .rank .bar i{display:block;height:100%;border-radius:6px;}
+  .rank .hood{width:130px;font-weight:600;font-size:.92rem;}
+  .rank .cnt{width:70px;text-align:right;color:var(--muted);font-size:.82rem;}
+  .sev{font-size:.7rem;padding:2px 8px;border-radius:6px;font-weight:700;}
+  .sev.low{background:#0f2a1a;color:var(--low);}
+  .sev.mid{background:#2a220f;color:var(--mid);}
+  .sev.high{background:#2a1313;color:var(--high);}
+  .feed{padding:8px 20px 16px;max-height:460px;overflow:auto;}
+  .inc{display:flex;gap:12px;align-items:flex-start;padding:12px 0;border-bottom:1px solid #1b2636;}
+  .inc .tag{font-size:.72rem;font-weight:700;padding:3px 9px;border-radius:7px;background:#2a1313;color:#fca5a5;white-space:nowrap;}
+  .inc .meta{font-size:.85rem;color:var(--muted);line-height:1.5;}
+  .inc .meta b{color:var(--text);}
+  .charts{display:grid;grid-template-columns:1fr 1fr;gap:18px;padding:0 28px 40px;}
+  .foot{padding:22px 28px;color:var(--muted);font-size:.8rem;border-top:1px solid var(--line);text-align:center;}
+  @media(max-width:900px){.grid,.charts,.stats{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <a href="/" class="brand">
+      <span class="eye">◉</span>
+      <div>REVERE <small>Boston Community Safety</small></div>
+    </a>
+    <div class="nav">
+      <a class="btn" href="/">Community</a>
+      <a class="btn primary" href="/login">Officials Login →</a>
+    </div>
+  </div>
+
+  <div class="hero">
+    <h1>How safe is your neighborhood?</h1>
+    <p>Real-time, AI-assisted crime awareness across Boston. Explore incident
+       rates in Roxbury, Dorchester, Mattapan and more — no account needed.</p>
+    <span class="live-pill"><span class="d"></span> <span id="liveText">connecting…</span></span>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="n" id="s-total">0</div><div class="l">Total incidents tracked</div></div>
+    <div class="stat"><div class="n" id="s-verified">0</div><div class="l">Verified by officials</div></div>
+    <div class="stat"><div class="n" id="s-hoods">0</div><div class="l">Neighborhoods monitored</div></div>
+    <div class="stat"><div class="n" id="s-top">—</div><div class="l">Highest-activity area</div></div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h3>Neighborhood crime map <small id="mapNote">heat = severity-weighted activity</small></h3>
+      <div id="map"></div>
+    </div>
+    <div class="card">
+      <h3>Crime rate by neighborhood</h3>
+      <div class="ranklist" id="ranklist"></div>
+    </div>
+  </div>
+
+  <div class="charts">
+    <div class="card">
+      <h3>Incidents by type</h3>
+      <div style="padding:18px;"><canvas id="crimeChart" height="220"></canvas></div>
+    </div>
+    <div class="card">
+      <h3>Recent verified incidents <small>public feed</small></h3>
+      <div class="feed" id="feed"><div style="color:var(--muted);padding:20px;">No verified incidents yet.</div></div>
+    </div>
+  </div>
+
+  <div class="foot">
+    REVERE is a public-awareness tool. Figures reflect AI detections reviewed by officials and may not represent official police statistics.
+  </div>
+
+<script>
+const NEIGH = {}; // name -> marker
+let map, crimeChart;
+
+function sevClass(score){ if(score>=8) return "high"; if(score>=4) return "mid"; return "low"; }
+function sevColor(i){ // i in 0..1
+  if(i>=0.66) return "#ef4444"; if(i>=0.33) return "#f59e0b"; return "#22c55e";
+}
+
+function initMap(){
+  map = L.map('map',{zoomControl:true,attributionControl:false}).setView([42.32,-71.08],12);
+  // Free, keyless OpenStreetMap tiles. A CSS filter gives them a dark look to
+  // match the UI (no API key, no account, no watermark).
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+    maxZoom:19,
+    subdomains:'abc'
+  }).addTo(map);
+}
+
+function renderMap(hoods){
+  hoods.forEach(h=>{
+    const radius = 10 + h.count*3;
+    const color = sevColor(h.intensity);
+    if(NEIGH[h.name]){
+      NEIGH[h.name].setStyle({color,fillColor:color}).setRadius(radius);
+      NEIGH[h.name].setPopupContent(popupHtml(h));
+    }else{
+      const m = L.circleMarker([h.lat,h.lng],{
+        radius, color, fillColor:color, fillOpacity:.45, weight:2
+      }).addTo(map).bindPopup(popupHtml(h));
+      NEIGH[h.name]=m;
+    }
+  });
+}
+function popupHtml(h){
+  return `<b>${h.name}</b><br>${h.count} incident(s)<br>severity score: ${h.score}`;
+}
+
+function renderRanks(hoods){
+  const el = document.getElementById('ranklist');
+  if(!hoods.length){ el.innerHTML='<div style="color:var(--muted);padding:20px;">No data yet.</div>'; return; }
+  const max = Math.max(...hoods.map(h=>h.score),1);
+  el.innerHTML = hoods.map(h=>{
+    const pct = Math.round((h.score/max)*100);
+    const col = sevColor(h.intensity);
+    const sc = sevClass(h.score);
+    return `<div class="rank">
+      <div class="hood">${h.name}</div>
+      <div class="bar"><i style="width:${pct}%;background:${col};"></i></div>
+      <div class="cnt">${h.count} · <span class="sev ${sc}">${h.score}</span></div>
+    </div>`;
+  }).join('');
+}
+
+function renderChart(byCrime){
+  const labels = Object.keys(byCrime);
+  const data = Object.values(byCrime);
+  const ctx = document.getElementById('crimeChart');
+  if(crimeChart){ crimeChart.data.labels=labels; crimeChart.data.datasets[0].data=data; crimeChart.update(); return; }
+  crimeChart = new Chart(ctx,{
+    type:'bar',
+    data:{labels,datasets:[{data,backgroundColor:'#60a5fa',borderRadius:6}]},
+    options:{plugins:{legend:{display:false}},
+      scales:{x:{ticks:{color:'#8aa0b8'},grid:{display:false}},
+              y:{ticks:{color:'#8aa0b8'},grid:{color:'#1b2636'}}}}
+  });
+}
+
+function renderStats(s){
+  document.getElementById('s-total').textContent = s.total;
+  document.getElementById('s-verified').textContent = s.verified;
+  document.getElementById('s-hoods').textContent = s.neighborhoods.filter(h=>h.count>0).length;
+  document.getElementById('s-top').textContent = s.neighborhoods.length ? (s.neighborhoods[0].count? s.neighborhoods[0].name : '—') : '—';
+  renderMap(s.neighborhoods);
+  renderRanks(s.neighborhoods.filter(h=>h.count>0));
+  renderChart(s.by_crime);
+}
+
+function addIncident(d, prepend=true){
+  const feed = document.getElementById('feed');
+  if(feed.firstChild && feed.firstChild.nodeType===1 && feed.children.length===1 && feed.children[0].style.color){ feed.innerHTML=''; }
+  const row = document.createElement('div');
+  row.className='inc';
+  row.innerHTML = `<span class="tag">${d.crime}</span>
+    <div class="meta"><b>${d.neighborhood}</b> · severity ${d.severity}<br>${d.date} ${d.time}</div>`;
+  if(prepend) feed.insertBefore(row, feed.firstChild); else feed.appendChild(row);
+}
+
+function connect(){
+  const proto = location.protocol==='https:'?'wss':'ws';
+  const ws = new WebSocket(`${proto}://${location.host}/ws/dashboard?channel=public`);
+  ws.onopen = ()=> document.getElementById('liveText').textContent='Live · connected';
+  ws.onclose= ()=>{ document.getElementById('liveText').textContent='reconnecting…'; setTimeout(connect,2000); };
+  ws.onmessage=(e)=>{
+    const m = JSON.parse(e.data);
+    if(m.type==='stats') renderStats(m.data);
+    else if(m.type==='history') m.data.forEach(d=>addIncident(d,false));
+    else if(m.type==='detection') addIncident(m.data,true);
+  };
+}
+
+initMap();
+connect();
+</script>
+</body>
+</html>

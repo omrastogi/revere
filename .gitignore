@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Saved video clips (generated at runtime)
+clips/*
+!clips/.gitkeep
+
+# Models (large binaries — keep out of git; download/place separately)
+*.h5
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
