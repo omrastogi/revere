@@ -3,38 +3,41 @@
 """
 revere_websocket_camera.py
 ==========================
-Live-camera REVERE detector built on the Phase-2 pipeline
-(frozen V-JEPA 2 + Head A zone / Head B type / Head C explanation + dictionary),
-streaming alerts to the REVERE backend over a WebSocket, with a polished GUI.
+REVERE detector built on the Phase-2 pipeline (frozen V-JEPA 2 ViT-L + zone /
+type / explanation heads), with the SAME polished GUI and flow as
+revere_websocket_new.py — just powered by the newer Phase-2 weights.
 
-Pipeline (mirrors poc/demo2.py, adapted to a live webcam):
-    rolling 16-frame clip @ 7.5 fps, a new clip every STRIDE frames
-      -> V-JEPA 2 ViT-L (frozen, mean-pooled 1024-d)
-      -> Head A: P(>=yellow), P(red)  -> 4-clip smoothing + hysteresis -> GREEN / YELLOW / RED
-      -> YELLOW/RED: Head C alignment -> top-3 dictionary phrases (explanation + severity)
-      -> RED:        Head B (13 classes) -> crime type if confident
-    Each YELLOW/RED event is de-duplicated into an alert (escalates YELLOW -> RED).
-    When an alert fires, a short webm clip of the moment is saved and streamed to the backend.
+Pipeline (from poc/, Phase 2):
+    video -> 7.5 fps frames, 224x224 -> 32 segments x 16 frames
+          -> V-JEPA 2 embeddings (frozen, per segment)
+          -> Head A (zone) : per-segment P(>=yellow), P(red)  [anomaly score = P(red)]
+          -> Head B (type) : crime type from the flagged segments
+          -> Head C (expl) : nearest dictionary phrases -> explanation + severity
+    If anomalous, the flagged span (+ padding) is saved as a webm clip and
+    streamed with metadata to  ws://127.0.0.1:8000/ws/ingest.
 
-Run (backend on same machine):
+Run (same machine as the backend):
     python revere_websocket_camera.py
-Run (backend on another PC on the same Wi-Fi):
+
+Run (backend on another PC — just pass its IPv4):
     python revere_websocket_camera.py --host 192.168.1.42
+    python revere_websocket_camera.py --backend ws://192.168.1.42:8000/ws/ingest
+You can also set the backend from the GUI's "Server connection" field at runtime.
 
 Dependencies: torch, transformers>=4.52, opencv-python, numpy, websockets  (+ tkinter)
 Checkpoints:  poc/heads/{head_a_zone.pt, head_b_13.pt, head_c_explain.pt}
               poc/dictionary/{dictionary.jsonl, dictionary.npy, dictionary_ids.json}
-Model:        facebook/vjepa2-vitl-fpc64-256 (downloaded on first run)
+Model:        facebook/vjepa2-vitl-fpc64-256 (downloaded on first run by transformers)
 
 Environment overrides:
     REVERE_POC_DIR      path to the poc/ folder        (default: ./poc)
-    REVERE_CLIP_DIR     where alert clips are written  (default: ./clips)
-    REVERE_WS_BACKEND   backend ingest websocket URL   (default: ws://127.0.0.1:8000/ws/ingest)
+    REVERE_CLIP_DIR     where clips are written         (default: ./clips)
+    REVERE_WS_BACKEND   backend ingest websocket URL    (default: ws://127.0.0.1:8000/ws/ingest)
+    REVERE_THRESHOLD    anomaly score threshold         (default: 0.5)
 """
 
 import asyncio
 import base64
-import collections
 import datetime
 import json
 import os
@@ -53,6 +56,7 @@ except ImportError:
 
 import tkinter as tk
 from tkinter import font as tkfont
+from tkinter.filedialog import askopenfilename
 
 
 # --------------------------------------------------------------------------- #
@@ -64,44 +68,36 @@ HEADS_DIR = os.path.join(POC_DIR, "heads")
 DICT_DIR = os.path.join(POC_DIR, "dictionary")
 CLIP_DIR = os.environ.get("REVERE_CLIP_DIR", os.path.join(BASE_DIR, "clips"))
 CLIP_PATH = os.path.join(CLIP_DIR, "output_clip.webm")
+THRESHOLD = float(os.environ.get("REVERE_THRESHOLD", "0.5"))
 DEFAULT_PORT = 8000
-
-# Pipeline constants (mirror poc/demo2.py)
-FPS = 7.5           # sampling rate fed to the model
-SIZE = 224          # V-JEPA input size
-T = 16              # frames per clip
-STRIDE_FRAMES = 8   # a new clip every 8 sampled frames (~1s at 7.5fps)
-SMOOTH = 4          # clips averaged for Head A
-T_YELLOW, T_RED, HYST = 0.5, 0.5, 0.1
-TYPE_MIN = 0.6      # Head B confidence to name a crime type
-DEDUP_S = 10.0      # same-event window
-CLIP_SECONDS = 6.0  # length of the alert clip we save/stream
-
-os.makedirs(CLIP_DIR, exist_ok=True)
-if POC_DIR not in sys.path:
-    sys.path.insert(0, POC_DIR)
 
 
 def _normalize_backend(value):
+    """Accept any of: a bare IP (192.168.1.42), host:port, or full ws:// URL,
+    and return a complete  ws://host:port/ws/ingest  URL."""
     if not value:
         return None
     v = value.strip()
     if v.startswith(("ws://", "wss://")):
         return v
-    for p in ("http://", "https://"):
-        if v.startswith(p):
-            v = v[len(p):]
+    # strip an accidental http(s):// prefix
+    if v.startswith("http://"):
+        v = v[len("http://"):]
+    elif v.startswith("https://"):
+        v = v[len("https://"):]
     v = v.rstrip("/")
-    if "/" in v:
+    if "/" in v:                       # host[:port]/path given
         host, path = v.split("/", 1)
         host = host if ":" in host else f"{host}:{DEFAULT_PORT}"
         return f"ws://{host}/{path}"
-    if ":" not in v:
+    if ":" not in v:                    # bare IP/hostname -> add default port
         v = f"{v}:{DEFAULT_PORT}"
     return f"ws://{v}/ws/ingest"
 
 
 def _resolve_backend():
+    """Backend URL from, in order: --backend/--host CLI flag, REVERE_WS_BACKEND
+    env var, else localhost."""
     argv = sys.argv[1:]
     for i, a in enumerate(argv):
         if a in ("--backend", "--host") and i + 1 < len(argv):
@@ -111,60 +107,103 @@ def _resolve_backend():
         if a.startswith("--host="):
             return _normalize_backend(a.split("=", 1)[1])
     env = os.environ.get("REVERE_WS_BACKEND")
-    return _normalize_backend(env) if env else "ws://127.0.0.1:8000/ws/ingest"
+    if env:
+        return _normalize_backend(env)
+    return "ws://127.0.0.1:8000/ws/ingest"
 
 
 WS_BACKEND = _resolve_backend()
 
-# lazy heavy imports
+# POC constants (mirror poc/extract_emb.py)
+FPS = 7.5           # sampling rate used by the POC
+SIZE = 224          # frame size fed to V-JEPA 2
+SEG = 32            # segments per video
+T = 16              # frames per segment
+CHUNK = 16          # clips per forward pass
+MODEL_NAME = "facebook/vjepa2-vitl-fpc64-256"
+
+# Padding for the saved clip around the flagged span (seconds, source-time)
+PRE_PAD_SECONDS = 3.0
+POST_PAD_SECONDS = 3.0
+DEFAULT_FPS = 15
+
+# Live-camera recording window (seconds) before each scoring pass
+LIVE_WINDOW_SECONDS = 20
+
+os.makedirs(CLIP_DIR, exist_ok=True)
+
+# make the poc package importable
+if POC_DIR not in sys.path:
+    sys.path.insert(0, POC_DIR)
+
+
+# --------------------------------------------------------------------------- #
+#  Lazy heavy imports (torch + the POC helpers) — loaded on demand
+# --------------------------------------------------------------------------- #
 torch = None
+nn = None
+clip_starts = None
 Encoder = None
 Head = None
 load_dictionary = None
 match_dictionary = None
+D = 1024
 
 
 def _import_backend():
-    global torch, Encoder, Head, load_dictionary, match_dictionary
+    """Import torch and the Phase-2 POC helpers once."""
+    global torch, nn, clip_starts, Encoder, Head, load_dictionary, match_dictionary, D
     if torch is not None:
         return
     import torch as _torch
-    # reuse the POC's V-JEPA encoder, alignment head, and dictionary matcher
+    import torch.nn as _nn
+    from extract_emb import clip_starts as _clip_starts, D as _D
     from align import Encoder as _Encoder, Head as _Head, \
         load_dictionary as _ld, match_dictionary as _md
     torch = _torch
+    nn = _nn
+    clip_starts = _clip_starts
     Encoder = _Encoder
     Head = _Head
     load_dictionary = _ld
     match_dictionary = _md
+    D = _D
 
 
 # --------------------------------------------------------------------------- #
-#  Model: V-JEPA 2 + Head A/B/C + dictionary  (mirrors demo2.Pipeline)
+#  Model wrapper: V-JEPA 2 + Head A (zone) + Head B (type) + Head C (explain)
 # --------------------------------------------------------------------------- #
-def _mlp_head(name, dev):
-    ck = torch.load(os.path.join(HEADS_DIR, name), map_location="cpu", weights_only=False)
-    import torch.nn as nn
-    m = nn.Sequential(
-        nn.LayerNorm(1024), nn.Linear(1024, ck["hidden"]), nn.GELU(),
-        nn.Dropout(ck["dropout"]), nn.Linear(ck["hidden"], ck["state"]["4.weight"].shape[0]))
-    m.load_state_dict(ck["state"])
-    return m.to(dev).eval(), ck
-
-
 class RevereModel:
     def __init__(self, on_log=None):
         self.on_log = on_log or (lambda *a, **k: None)
         self.ready = False
         self.dev = None
+        self.encoder = None
+        self.head_a = None       # zone: outputs [P(>=yellow), P(red)]
+        self.head_b = None       # crime type (13 classes)
+        self.classes = []
+        self.head_c = None       # alignment head -> dictionary explanation
+        self.concepts = None
+        self.D = None
+        self.owner = None
+
+    def _mlp_head(self, name):
+        """Load a zone_heads.py MLP head: LayerNorm->Linear->GELU->Dropout->Linear."""
+        ck = torch.load(os.path.join(HEADS_DIR, name), map_location="cpu", weights_only=False)
+        m = nn.Sequential(
+            nn.LayerNorm(1024), nn.Linear(1024, ck["hidden"]), nn.GELU(),
+            nn.Dropout(ck["dropout"]), nn.Linear(ck["hidden"], ck["state"]["4.weight"].shape[0]))
+        m.load_state_dict(ck["state"])
+        return m.to(self.dev).eval(), ck
 
     def load(self):
         _import_backend()
         self.dev = "cuda" if torch.cuda.is_available() else "cpu"
         self.on_log(f"Device: {self.dev}")
-        self.on_log("Loading Head A / B / C and dictionary...")
-        self.head_a, _ = _mlp_head("head_a_zone.pt", self.dev)
-        self.head_b, cb = _mlp_head("head_b_13.pt", self.dev)
+
+        self.on_log("Loading Head A (zone) / Head B (type) / Head C (explain)…")
+        self.head_a, _ = self._mlp_head("head_a_zone.pt")
+        self.head_b, cb = self._mlp_head("head_b_13.pt")
         self.classes = cb["classes"]
         self.head_c = Head(torch.zeros(1024), torch.ones(1024))
         self.head_c.load_state_dict(
@@ -172,81 +211,142 @@ class RevereModel:
                        map_location="cpu", weights_only=False)["state"])
         self.head_c = self.head_c.to(self.dev).eval()
         self.concepts, self.D, self.owner = load_dictionary(self.dev, DICT_DIR)
-        self.on_log("Loading V-JEPA 2 (first run downloads the model)...")
+
+        self.on_log("Loading V-JEPA 2 (first run downloads the model)…")
         self.encoder = Encoder(self.dev, torch.float16)
         self.ready = True
         self.on_log("Model ready.")
 
-    def embed(self, clip_frames):
-        """clip_frames: (T, 224, 224, 3) uint8 RGB -> (1024,) tensor on device."""
-        x = torch.from_numpy(clip_frames[None])  # (1, T, H, W, 3)
-        return self.encoder(x).to(self.dev)[0]   # Encoder handles resize/normalize
+    # ---- inference ----
+    def _segment_embs(self, frames):
+        """frames: (N, 224, 224, 3) uint8 RGB -> (SEG, 1024) tensor (one clip per segment)."""
+        center, _ = clip_starts(len(frames), np.random.default_rng(0))  # center clips
+        clips = []
+        for s in center:
+            x = frames[s:s + T]
+            if len(x) < T:
+                x = np.concatenate([x, np.repeat(x[-1:], T - len(x), 0)])
+            clips.append(x)
+        out = []
+        for i in range(0, SEG, CHUNK):
+            batch = torch.from_numpy(np.stack(clips[i:i + CHUNK]))  # (b, T, H, W, 3) uint8
+            out.append(self.encoder(batch))  # Encoder handles resize/normalize -> (b, 1024)
+        return torch.cat(out).to(self.dev).float()  # (SEG, 1024)
 
-
-class LivePipeline:
-    """Head-A smoothing + hysteresis + Head C/B + alert dedup, fed one clip embedding at a time."""
-
-    def __init__(self, model):
-        self.m = model
-        self.buf = collections.deque(maxlen=SMOOTH)
-        self.red = False
-        self.yel = False
-        self.alerts = []
-
-    def step(self, x, t):
+    def score(self, frames):
+        """Run Head A/B/C. Returns the SAME dict shape as the Phase-1 detector,
+        plus zone/severity/explanation so downstream code is unchanged."""
+        feats = self._segment_embs(frames)
         with torch.no_grad():
-            self.buf.append(self.m.head_a(x[None]).sigmoid()[0].cpu().numpy())
-            py, pr = np.mean(self.buf, 0)
-            self.red = bool(pr > (T_RED - HYST if self.red else T_RED))
-            self.yel = bool(py > (T_YELLOW - HYST if self.yel else T_YELLOW))
-            zone = "RED" if self.red else "YELLOW" if self.yel else "GREEN"
-            rec = dict(t=round(t, 2), zone=zone, p_yellow=float(py), p_red=float(pr))
-            if zone == "GREEN":
-                return rec
-            # Head C explanation
-            S = match_dictionary(self.m.head_c(x[None])[0], self.m.D, self.m.owner,
-                                 len(self.m.concepts))[0]
-            top = S.topk(3).indices.tolist()
-            rec["explanation"] = [dict(phrase=self.m.concepts[k]["phrase"],
-                                       zone=self.m.concepts[k]["zone"],
-                                       severity=self.m.concepts[k]["severity"],
-                                       cos=round(float(S[k]), 3)) for k in top]
-            rec["severity"] = self.m.concepts[top[0]]["severity"]
-            rec["type"] = None
-            if zone == "RED":
-                pb = self.m.head_b(x[None]).softmax(1)[0]
-                k = int(pb.argmax())
-                rec["type_p"] = round(float(pb[k]), 3)
-                rec["type"] = self.m.classes[k] if float(pb[k]) >= TYPE_MIN else "Unclassified incident"
-            self._alert(rec)
-            return rec
+            pa = self.head_a(feats).sigmoid()          # (SEG, 2) = [P(>=yellow), P(red)]
+        seg_scores = pa[:, 1]                            # anomaly score = P(red)
+        max_score = float(seg_scores.max())
+        anomalous = max_score > THRESHOLD
 
-    def _alert(self, rec):
-        a = self.alerts[-1] if self.alerts else None
-        if a and rec["t"] - a["t_last"] <= DEDUP_S:
-            a["t_last"] = rec["t"]
-            a["updates"] += 1
-            a["max_severity"] = max(a["max_severity"], rec["severity"])
-            if rec["zone"] == "RED" and a["zone"] == "YELLOW":
-                a["zone"] = "RED"
-            if rec.get("type") and a.get("type") in (None, "Unclassified incident"):
-                a["type"] = rec["type"]
-            if rec["p_red"] + rec["p_yellow"] > a["peak_score"]:
-                a.update(peak_t=rec["t"], peak_score=rec["p_red"] + rec["p_yellow"],
-                         explanation=rec["explanation"], severity=rec["severity"])
-            rec["alert_new"] = False
-        else:
-            a = dict(id=len(self.alerts), t_start=rec["t"], t_last=rec["t"], zone=rec["zone"],
-                     type=rec.get("type"), explanation=rec["explanation"], severity=rec["severity"],
-                     max_severity=rec["severity"], peak_t=rec["t"],
-                     peak_score=rec["p_red"] + rec["p_yellow"], updates=0)
-            self.alerts.append(a)
-            rec["alert_new"] = True
-        rec["alert"] = a["id"]
+        crime, severity, explanation = "Normal", None, []
+        if anomalous:
+            peak = int(seg_scores.argmax())
+            x = feats[peak:peak + 1]
+            with torch.no_grad():
+                # Head C: explanation (top-3 dictionary phrases) from the peak segment
+                S = match_dictionary(self.head_c(x)[0], self.D, self.owner, len(self.concepts))[0]
+                top = S.topk(3).indices.tolist()
+                explanation = [dict(phrase=self.concepts[k]["phrase"],
+                                    zone=self.concepts[k]["zone"],
+                                    severity=self.concepts[k]["severity"],
+                                    cos=round(float(S[k]), 3)) for k in top]
+                severity = self.concepts[top[0]]["severity"]
+                # Head B: crime type from the top-k most anomalous segments
+                k = min(5, SEG)
+                topk = seg_scores.topk(k).indices
+                probs = self.head_b(feats[topk].mean(0, keepdim=True)).softmax(-1)[0]
+                crime = self.classes[int(probs.argmax())]
+
+        return {
+            "seg_scores": seg_scores.cpu().numpy(),
+            "max_score": max_score,
+            "crime": crime,
+            "anomalous": anomalous,
+            "severity": severity,
+            "explanation": explanation,
+        }
 
 
 # --------------------------------------------------------------------------- #
-#  Location, clip saving, websocket sender
+#  Video helpers
+# --------------------------------------------------------------------------- #
+def read_frames(path):
+    """Decode at ~FPS (7.5), resized to 224x224 RGB. Returns (frames_224, stride, src_fps)."""
+    cap = cv2.VideoCapture(path)
+    src_fps = cap.get(cv2.CAP_PROP_FPS) or 30
+    stride = max(1, round(src_fps / FPS))
+    frames, n = [], 0
+    while cap.grab():
+        if n % stride == 0:
+            ok, f = cap.retrieve()
+            if not ok:
+                break
+            f = cv2.resize(f, (SIZE, SIZE), interpolation=cv2.INTER_AREA)
+            frames.append(cv2.cvtColor(f, cv2.COLOR_BGR2RGB))
+        n += 1
+    cap.release()
+    if not frames:
+        return np.zeros((0, SIZE, SIZE, 3), np.uint8), stride, src_fps
+    return np.stack(frames), stride, src_fps
+
+
+def save_clip_from_source(src_path, seg_scores, out_path):
+    """Cut a contiguous webm clip from the ORIGINAL video spanning the flagged
+    segments (+ padding), at the source's real fps. Returns (ok, n_frames, fps)."""
+    flagged = np.where(seg_scores > THRESHOLD)[0]
+    if len(flagged) == 0:
+        return False, 0, DEFAULT_FPS
+
+    cap = cv2.VideoCapture(src_path)
+    src_fps = cap.get(cv2.CAP_PROP_FPS) or DEFAULT_FPS
+    total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 0
+    w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+    # map flagged segments -> source-frame span
+    seg_first, seg_last = int(flagged.min()), int(flagged.max())
+    start = int(seg_first / SEG * total) - int(PRE_PAD_SECONDS * src_fps)
+    end = int((seg_last + 1) / SEG * total) + int(POST_PAD_SECONDS * src_fps)
+    start = max(0, start)
+    end = min(total - 1, end) if total else end
+
+    fourcc = cv2.VideoWriter_fourcc(*"VP80")
+    writer = cv2.VideoWriter(out_path, fourcc, float(src_fps), (w, h))
+    cap.set(cv2.CAP_PROP_POS_FRAMES, start)
+    n = 0
+    idx = start
+    while True:
+        ok, frame = cap.read()
+        if not ok or idx > end:
+            break
+        writer.write(frame)
+        n += 1
+        idx += 1
+    writer.release()
+    cap.release()
+    return n > 0, n, src_fps
+
+
+def save_clip_from_frames(frames_bgr, out_path, fps):
+    """Write a list of BGR frames to a webm clip (used for live camera)."""
+    if not frames_bgr:
+        return False
+    h, w, _ = frames_bgr[0].shape
+    fourcc = cv2.VideoWriter_fourcc(*"VP80")
+    writer = cv2.VideoWriter(out_path, fourcc, float(fps), (w, h))
+    for f in frames_bgr:
+        writer.write(f)
+    writer.release()
+    return True
+
+
+# --------------------------------------------------------------------------- #
+#  Location + time
 # --------------------------------------------------------------------------- #
 def get_location():
     try:
@@ -263,21 +363,32 @@ def get_date_and_time():
     return now.strftime("%Y_%m_%d"), now.strftime("%H_%M_%S")
 
 
-def save_clip(frames_bgr, out_path, fps):
-    if not frames_bgr:
-        return False
-    h, w, _ = frames_bgr[0].shape
-    writer = cv2.VideoWriter(out_path, cv2.VideoWriter_fourcc(*"VP80"), float(fps), (w, h))
-    for f in frames_bgr:
-        writer.write(f)
-    writer.release()
-    return True
-
-
+# --------------------------------------------------------------------------- #
+#  WebSocket sender (thread-safe)
+# --------------------------------------------------------------------------- #
 async def _ws_send(payload, server):
     async with websockets.connect(server, max_size=None) as ws:
         await ws.send(json.dumps(payload))
         return await ws.recv()
+
+
+async def _ws_connect_only(server):
+    async with websockets.connect(server, max_size=None, open_timeout=8):
+        return True
+
+
+def _ws_ping(server):
+    """Open+close a websocket to confirm reachability. Returns None on success,
+    else an error string."""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        loop.run_until_complete(_ws_connect_only(server))
+        return None
+    except Exception as e:  # noqa: BLE001
+        return str(e)
+    finally:
+        loop.close()
 
 
 def _ws_send_blocking(payload, server, result):
@@ -291,30 +402,11 @@ def _ws_send_blocking(payload, server, result):
         loop.close()
 
 
-async def _ws_connect_only(server):
-    async with websockets.connect(server, max_size=None, open_timeout=8):
-        return True
-
-
-def _ws_ping(server):
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        loop.run_until_complete(_ws_connect_only(server))
-        return None
-    except Exception as e:  # noqa: BLE001
-        return str(e)
-    finally:
-        loop.close()
-
-
-def send_detection(crime, zone, severity, explanation, city, locality, coordinates,
-                   date, time_str, video_path, confidence=None):
+def send_detection(crime, city, locality, coordinates, date, time_str, video_path, confidence=None):
     if websockets is None:
         return None
     payload = {
-        "crime": crime, "zone": zone, "severity": severity,
-        "explanation": explanation, "location": city, "locality": locality,
+        "crime": crime, "location": city, "locality": locality,
         "coordinates": coordinates, "date": date, "time": time_str,
     }
     if confidence is not None:
@@ -327,26 +419,79 @@ def send_detection(crime, zone, severity, explanation, city, locality, coordinat
         except Exception:  # noqa: BLE001
             pass
     result = {}
-    t = threading.Thread(target=_ws_send_blocking, args=(payload, WS_BACKEND, result))
+    t = threading.Thread(target=_ws_send_blocking, args=(payload, WS_BACKEND, result))  # noqa: E501 (uses live global)
     t.start()
     t.join(60)
-    return None if result.get("error") else result.get("reply")
+    if result.get("error"):
+        return None
+    return result.get("reply")
 
 
 # --------------------------------------------------------------------------- #
-#  Camera analyzer
+#  Analyzers  (report progress back to the GUI via on_event)
 # --------------------------------------------------------------------------- #
-def center_crop_43(img):
-    """Center-crop to 4:3 (flowchart preprocess), then the caller resizes to 224."""
-    h, w = img.shape[:2]
-    if w * 3 > h * 4:
-        cw = round(h * 4 / 3)
-        return img[:, (w - cw) // 2:(w - cw) // 2 + cw]
-    ch = round(w * 3 / 4)
-    return img[(h - ch) // 2:(h - ch) // 2 + ch]
+class FileAnalyzer:
+    def __init__(self, model, path, on_event=None):
+        self.model = model
+        self.path = path
+        self.on_event = on_event or (lambda *a, **k: None)
+
+    def start(self):
+        threading.Thread(target=self._run, daemon=True).start()
+
+    def _run(self):
+        t0 = time.time()
+        name = os.path.basename(self.path)
+        self.on_event("start", f"Reading {name} @ {FPS} fps…")
+        frames, stride, src_fps = read_frames(self.path)
+        if len(frames) == 0:
+            self.on_event("error", "Could not read any frames from the video.")
+            self.on_event("done", "")
+            return
+
+        self.on_event("start", f"Embedding {len(frames)} frames with V-JEPA 2…")
+        res = self.model.score(frames)
+
+        if not res["anomalous"]:
+            self.on_event("none",
+                          f"No crime detected (max score {res['max_score']:.2f} < {THRESHOLD}).")
+            self.on_event("done", f"Done in {time.time()-t0:.1f}s")
+            return
+
+        self.on_event("detect",
+                      f"⚠ {res['crime']} detected ({res['max_score']*100:.0f}% conf.)")
+
+        ok, n, clip_fps = save_clip_from_source(self.path, res["seg_scores"], CLIP_PATH)
+        if not ok:
+            self.on_event("error", "Failed to cut the incident clip.")
+            self.on_event("done", "")
+            return
+        self.on_event("clip", f"Clip cut: {n} frames (~{n/clip_fps:.1f}s) at {clip_fps:.0f} fps")
+
+        self._deliver(res["crime"], res["max_score"])
+        self.on_event("done", f"Done in {time.time()-t0:.1f}s")
+
+    def _deliver(self, crime, conf):
+        city, locality, coordinates = get_location()
+        date, time_str = get_date_and_time()
+        archive = CLIP_PATH
+        try:
+            archive = os.path.join(CLIP_DIR, f"{city}_{date}+{time_str}.webm")
+            os.replace(CLIP_PATH, archive)
+        except Exception:  # noqa: BLE001
+            archive = CLIP_PATH
+        self.on_event("sending", f"Streaming '{crime}' @ {city}/{locality}…")
+        reply = send_detection(crime, city, locality, coordinates, date, time_str, archive, conf)
+        if reply:
+            self.on_event("sent", f"Delivered · {crime} @ {city}")
+        else:
+            self.on_event("error", "Backend unreachable — is the server running?")
 
 
 class CameraAnalyzer:
+    """Records rolling windows from the webcam, scores each with the POC model,
+    and streams any anomaly. Press q in the preview window to stop."""
+
     def __init__(self, model, on_event=None, cam_index=0):
         self.model = model
         self.on_event = on_event or (lambda *a, **k: None)
@@ -366,99 +511,64 @@ class CameraAnalyzer:
             self.on_event("error", "Could not open the camera.")
             self.on_event("done", "")
             return
-        cam_fps = cap.get(cv2.CAP_PROP_FPS) or 30
+        cam_fps = cap.get(cv2.CAP_PROP_FPS) or DEFAULT_FPS
         sample_stride = max(1, round(cam_fps / FPS))
+        window_frames = int(LIVE_WINDOW_SECONDS * cam_fps)
 
-        pipe = LivePipeline(self.model)
-        sampled = collections.deque(maxlen=T)                    # 224-RGB frames for the model
-        recent_bgr = collections.deque(maxlen=int(cam_fps * CLIP_SECONDS))  # full-res for clip saving
+        self.on_event("start", f"Live camera · scoring every {LIVE_WINDOW_SECONDS}s window…")
+        buf_bgr = []            # full-res BGR frames for clip saving
+        buf_small = []          # 224 RGB frames for the model
         n = 0
-        since_clip = 0
-        self.on_event("start", "Live camera running - monitoring for incidents...")
-
         while self.running:
             ok, frame = cap.read()
             if not ok:
                 break
-            recent_bgr.append(frame.copy())
-
+            buf_bgr.append(frame)
             if n % sample_stride == 0:
-                crop = center_crop_43(frame)
-                small = cv2.resize(crop, (SIZE, SIZE), interpolation=cv2.INTER_AREA)
-                sampled.append(cv2.cvtColor(small, cv2.COLOR_BGR2RGB))
-                since_clip += 1
+                small = cv2.resize(frame, (SIZE, SIZE), interpolation=cv2.INTER_AREA)
+                buf_small.append(cv2.cvtColor(small, cv2.COLOR_BGR2RGB))
+            n += 1
 
-                # once the rolling buffer is full, score a clip every STRIDE sampled frames
-                if len(sampled) == T and since_clip >= STRIDE_FRAMES:
-                    since_clip = 0
-                    try:
-                        emb = self.model.embed(np.stack(sampled))
-                        rec = pipe.step(emb, t=n / cam_fps)
-                        self._on_rec(rec, list(recent_bgr), cam_fps)
-                    except Exception as e:  # noqa: BLE001
-                        self.on_event("error", f"inference error: {e}")
-
-            # live preview with a zone-colored border
-            self._draw(frame, pipe)
-            cv2.imshow("REVERE - Live Camera (press q to stop)", frame)
+            cv2.imshow("REVERE — Live Camera (press q to stop)", frame)
             if cv2.waitKey(1) & 0xFF == ord("q"):
                 break
-            n += 1
+
+            if len(buf_bgr) >= window_frames and len(buf_small) >= SEG:
+                self._score_window(list(buf_small), list(buf_bgr), cam_fps)
+                buf_bgr.clear()
+                buf_small.clear()
 
         self.running = False
         cap.release()
         cv2.destroyAllWindows()
         self.on_event("done", "Camera stopped.")
 
-    def _on_rec(self, rec, clip_bgr, fps):
-        zone = rec["zone"]
-        if zone == "GREEN":
-            self.on_event("green", f"GREEN - normal (Py {rec['p_yellow']:.2f} Pr {rec['p_red']:.2f})")
+    def _score_window(self, small_rgb, bgr, cam_fps):
+        res = self.model.score(np.stack(small_rgb))
+        if not res["anomalous"]:
+            self.on_event("none", f"Window clear (max {res['max_score']:.2f}).")
             return
-        phrase = rec["explanation"][0]["phrase"] if rec.get("explanation") else ""
-        if zone == "YELLOW":
-            self.on_event("yellow", f"YELLOW - {phrase} (sev {rec['severity']}/5)")
-        else:  # RED
-            self.on_event("red", f"RED - {rec.get('type','incident')} - {phrase} (sev {rec['severity']}/5)")
-
-        # Only stream a detection when a NEW alert opens (avoid spamming the backend)
-        if rec.get("alert_new"):
-            self._deliver(rec, clip_bgr, fps)
-
-    def _deliver(self, rec, clip_bgr, fps):
-        if not save_clip(clip_bgr, CLIP_PATH, fps):
-            self.on_event("error", "could not save alert clip")
-            return
-        city, locality, coordinates = get_location()
-        date, time_str = get_date_and_time()
-        archive = CLIP_PATH
-        try:
-            archive = os.path.join(CLIP_DIR, f"{city}_{date}+{time_str}.webm")
-            os.replace(CLIP_PATH, archive)
-        except Exception:  # noqa: BLE001
+        self.on_event("detect", f"⚠ {res['crime']} detected ({res['max_score']*100:.0f}% conf.)")
+        if save_clip_from_frames(bgr, CLIP_PATH, cam_fps):
+            self.on_event("clip", f"Clip saved ({len(bgr)} frames)")
+            city, locality, coordinates = get_location()
+            date, time_str = get_date_and_time()
             archive = CLIP_PATH
-
-        crime = rec.get("type") or ("Suspicious activity" if rec["zone"] == "YELLOW" else "Incident")
-        explanation = "; ".join(e["phrase"] for e in rec.get("explanation", [])[:2])
-        conf = rec["p_red"] if rec["zone"] == "RED" else rec["p_yellow"]
-        self.on_event("sending", f"Streaming {rec['zone']} alert '{crime}' @ {city}/{locality}...")
-        reply = send_detection(crime, rec["zone"], rec["severity"], explanation,
-                               city, locality, coordinates, date, time_str, archive, conf)
-        self.on_event("sent" if reply else "error",
-                      f"Delivered - {crime} @ {city}" if reply
-                      else "Backend unreachable - is the server running?")
-
-    def _draw(self, frame, pipe):
-        color = (0, 0, 255) if pipe.red else (0, 200, 255) if pipe.yel else (0, 170, 0)
-        label = "RED" if pipe.red else "YELLOW" if pipe.yel else "GREEN"
-        h, w = frame.shape[:2]
-        cv2.rectangle(frame, (0, 0), (w - 1, h - 1), color, max(3, w // 160))
-        cv2.putText(frame, label, (14, 40), cv2.FONT_HERSHEY_SIMPLEX, 1.1, (0, 0, 0), 5, cv2.LINE_AA)
-        cv2.putText(frame, label, (14, 40), cv2.FONT_HERSHEY_SIMPLEX, 1.1, color, 2, cv2.LINE_AA)
+            try:
+                archive = os.path.join(CLIP_DIR, f"{city}_{date}+{time_str}.webm")
+                os.replace(CLIP_PATH, archive)
+            except Exception:  # noqa: BLE001
+                archive = CLIP_PATH
+            self.on_event("sending", f"Streaming '{res['crime']}' @ {city}/{locality}…")
+            reply = send_detection(res["crime"], city, locality, coordinates,
+                                   date, time_str, archive, res["max_score"])
+            self.on_event("sent" if reply else "error",
+                          f"Delivered · {res['crime']} @ {city}" if reply
+                          else "Backend unreachable — is the server running?")
 
 
 # --------------------------------------------------------------------------- #
-#  GUI  (dark REVERE control panel, zone-aware)
+#  GUI — dark REVERE-branded control panel
 # --------------------------------------------------------------------------- #
 BG, PANEL, PANEL2, LINE = "#0b1220", "#131c2b", "#1a2538", "#243247"
 TEXT, MUTED, TEAL, BLUE = "#e8eef6", "#8aa0b8", "#2dd4bf", "#60a5fa"
@@ -471,10 +581,10 @@ class RevereApp:
         self.model = RevereModel(on_log=lambda m: self.on_event("log", m))
         self.camera = None
 
-        root.title("REVERE - Live Camera (Phase 2)")
-        root.geometry("720x680")
+        root.title("REVERE — V-JEPA 2 Detector (Phase 2)")
+        root.geometry("700x660")
         root.configure(bg=BG)
-        root.minsize(660, 600)
+        root.minsize(640, 580)
 
         self.f_title = tkfont.Font(family="Segoe UI", size=22, weight="bold")
         self.f_sub = tkfont.Font(family="Segoe UI", size=10)
@@ -489,37 +599,42 @@ class RevereApp:
         self._log()
         self._footer()
 
-        self.log("Starting up...", MUTED)
+        self.log("Starting up…", MUTED)
         self.log(f"Backend: {WS_BACKEND}", MUTED)
         self.log(f"Heads: {HEADS_DIR}", MUTED)
         if websockets is None:
-            self.log("'websockets' not installed - alerts can't be sent.", DANGER)
+            self.log("'websockets' not installed — detections can't be sent.", DANGER)
+
+        # load the (heavy) model in the background
         threading.Thread(target=self._load_model, daemon=True).start()
 
+    # ---- build ----
     def _header(self):
-        bar = tk.Frame(self.root, bg="#0d1627", height=84); bar.pack(fill="x"); bar.pack_propagate(False)
+        bar = tk.Frame(self.root, bg="#0d1627", height=84)
+        bar.pack(fill="x"); bar.pack_propagate(False)
         wrap = tk.Frame(bar, bg="#0d1627"); wrap.pack(side="left", padx=24, pady=16)
         eye = tk.Canvas(wrap, width=44, height=44, bg="#0d1627", highlightthickness=0)
-        eye.create_oval(4, 4, 40, 40, fill=TEAL, outline=""); eye.create_oval(15, 15, 29, 29, fill="#0d1627", outline="")
+        eye.create_oval(4, 4, 40, 40, fill=TEAL, outline="")
+        eye.create_oval(15, 15, 29, 29, fill="#0d1627", outline="")
         eye.pack(side="left", padx=(0, 14))
         t = tk.Frame(wrap, bg="#0d1627"); t.pack(side="left")
         tk.Label(t, text="REVERE", font=self.f_title, fg=TEXT, bg="#0d1627").pack(anchor="w")
-        tk.Label(t, text="Live Camera - V-JEPA 2 + zone / type / explanation", font=self.f_sub,
+        tk.Label(t, text="V-JEPA 2 · zone / type / explanation · Desktop Agent", font=self.f_sub,
                  fg=MUTED, bg="#0d1627").pack(anchor="w")
         pill = tk.Frame(bar, bg="#0d1627"); pill.pack(side="right", padx=24)
         self.dot = tk.Canvas(pill, width=12, height=12, bg="#0d1627", highlightthickness=0)
         self._dot("#555"); self.dot.pack(side="left", padx=(0, 7), pady=4)
-        self.conn = tk.Label(pill, text="loading...", font=self.f_small, fg=MUTED, bg="#0d1627")
+        self.conn = tk.Label(pill, text="loading…", font=self.f_small, fg=MUTED, bg="#0d1627")
         self.conn.pack(side="left")
 
     def _status(self):
         card = self._card("CURRENT STATUS")
-        self.status_var = tk.StringVar(value="Loading model...")
+        self.status_var = tk.StringVar(value="Loading model…")
         tk.Label(card, textvariable=self.status_var, font=self.f_lbl, fg=TEXT, bg=PANEL,
-                 anchor="w", justify="left", wraplength=640).pack(fill="x", padx=18, pady=(2, 10))
+                 anchor="w", justify="left", wraplength=620).pack(fill="x", padx=18, pady=(2, 10))
         row = tk.Frame(card, bg=PANEL); row.pack(fill="x", padx=18, pady=(0, 14))
-        self.zone_chip = tk.Label(row, text="GREEN", font=self.f_small, fg="#042", bg="#22c55e", padx=14, pady=5)
-        self.zone_chip.pack(side="left")
+        self.chip = tk.Label(row, text="No incident", font=self.f_small, fg=MUTED, bg=PANEL2, padx=12, pady=5)
+        self.chip.pack(side="left")
 
     def _server(self):
         card = self._card("SERVER CONNECTION")
@@ -534,43 +649,50 @@ class RevereApp:
                   fg="#06101f", bg=BLUE, bd=0, cursor="hand2", padx=12).pack(side="left", padx=(0, 6))
         tk.Button(row, text="Test", command=self._test_backend, font=self.f_small,
                   fg=TEXT, bg=PANEL2, bd=0, cursor="hand2", padx=12).pack(side="left")
-        tk.Label(card, text="On another PC, enter the server's IPv4 (e.g. 192.168.1.42) and click Apply.",
-                 font=self.f_small, fg=MUTED, bg=PANEL, wraplength=640, justify="left").pack(
+        tk.Label(card,
+                 text="On another PC, enter the server's IPv4 (e.g. 192.168.1.42) and click Apply.",
+                 font=self.f_small, fg=MUTED, bg=PANEL, wraplength=620, justify="left").pack(
                  anchor="w", padx=18, pady=(0, 14))
 
     def _apply_backend(self):
         global WS_BACKEND
         url = _normalize_backend(self.backend_var.get())
         if not url:
-            self.log("Enter an IP or URL first.", WARN); return
-        WS_BACKEND = url; self.backend_var.set(url)
+            self.log("Enter an IP or URL first.", WARN)
+            return
+        WS_BACKEND = url
+        self.backend_var.set(url)
         self.log(f"Backend set to {url}", OK)
 
     def _test_backend(self):
         self._apply_backend()
-        self.log(f"Testing {WS_BACKEND} ...", MUTED)
-        threading.Thread(target=self._test_worker, args=(WS_BACKEND,), daemon=True).start()
+        self.log(f"Testing {WS_BACKEND} …", MUTED)
+        threading.Thread(target=self._test_backend_worker, args=(WS_BACKEND,), daemon=True).start()
 
-    def _test_worker(self, url):
+    def _test_backend_worker(self, url):
         if websockets is None:
-            self.on_event("error", "'websockets' not installed."); return
+            self.on_event("error", "'websockets' not installed.")
+            return
         err = _ws_ping(url)
-        self.on_event("error" if err else "sent",
-                      f"Cannot reach backend: {err}" if err else "Backend reachable")
+        if err:
+            self.on_event("error", f"Cannot reach backend: {err}")
+        else:
+            self.on_event("sent", "Backend reachable ✓")
 
     def _actions(self):
-        card = self._card("CAMERA")
+        card = self._card("DETECTION SOURCE")
         row = tk.Frame(card, bg=PANEL); row.pack(fill="x", padx=18, pady=(4, 10))
-        self.btn_start = tk.Button(row, text="Start Live Camera", command=self.on_start,
-                                   font=self.f_lbl, fg="#06101f", bg=TEAL, bd=0, cursor="hand2", state="disabled")
-        self.btn_start.pack(side="left", expand=True, fill="x", padx=(0, 8), ipady=10)
-        self.btn_stop = tk.Button(row, text="Stop", command=self.on_stop,
-                                  font=self.f_lbl, fg=TEXT, bg=PANEL2, bd=0, cursor="hand2", state="disabled")
-        self.btn_stop.pack(side="left", ipady=10, padx=(8, 0))
-        tk.Label(card, text="GREEN logs only. YELLOW/RED fire an alert with a saved clip, "
-                            "an explanation, and (for RED) a crime type - streamed to the dashboard. "
+        self.btn_file = tk.Button(row, text="📁  Analyze Video File", command=self.on_file,
+                                  font=self.f_lbl, fg="#06101f", bg=BLUE, bd=0, cursor="hand2",
+                                  state="disabled")
+        self.btn_file.pack(side="left", expand=True, fill="x", padx=(0, 8), ipady=10)
+        self.btn_cam = tk.Button(row, text="📷  Live Camera", command=self.on_camera,
+                                 font=self.f_lbl, fg="#06101f", bg=TEAL, bd=0, cursor="hand2",
+                                 state="disabled")
+        self.btn_cam.pack(side="left", expand=True, fill="x", padx=(8, 0), ipady=10)
+        tk.Label(card, text=f"Head A flags anomalies (threshold {THRESHOLD}); Head B names the crime. "
                             "Press q in the preview to stop.",
-                 font=self.f_small, fg=MUTED, bg=PANEL, wraplength=640, justify="left").pack(
+                 font=self.f_small, fg=MUTED, bg=PANEL, wraplength=620, justify="left").pack(
                  anchor="w", padx=18, pady=(0, 14))
 
     def _log(self):
@@ -578,14 +700,14 @@ class RevereApp:
         frame = tk.Frame(card, bg=PANEL2, highlightbackground=LINE, highlightthickness=1)
         frame.pack(fill="both", expand=True, padx=18, pady=(2, 16))
         self.logbox = tk.Text(frame, bg=PANEL2, fg=TEXT, font=self.f_mono, bd=0,
-                              padx=12, pady=10, wrap="word", state="disabled", height=10)
+                              padx=12, pady=10, wrap="word", state="disabled", height=9)
         self.logbox.pack(side="left", fill="both", expand=True)
         sb = tk.Scrollbar(frame, command=self.logbox.yview); sb.pack(side="right", fill="y")
         self.logbox.config(yscrollcommand=sb.set)
 
     def _footer(self):
         f = tk.Frame(self.root, bg=BG); f.pack(fill="x", side="bottom")
-        tk.Label(f, text="REVERE - alerts are reviewed by officials before going public",
+        tk.Label(f, text="REVERE · detections are reviewed by officials before going public",
                  font=self.f_small, fg=MUTED, bg=BG).pack(pady=8)
 
     def _card(self, title, grow=False):
@@ -593,12 +715,15 @@ class RevereApp:
         outer.pack(fill="both" if grow else "x", expand=grow, padx=20, pady=(14, 0))
         card = tk.Frame(outer, bg=PANEL, highlightbackground=LINE, highlightthickness=1)
         card.pack(fill="both", expand=True)
-        tk.Label(card, text=title, font=self.f_small, fg=MUTED, bg=PANEL).pack(anchor="w", padx=18, pady=(12, 2))
+        tk.Label(card, text=title, font=self.f_small, fg=MUTED, bg=PANEL).pack(
+            anchor="w", padx=18, pady=(12, 2))
         return card
 
     def _dot(self, color):
-        self.dot.delete("all"); self.dot.create_oval(1, 1, 11, 11, fill=color, outline="")
+        self.dot.delete("all")
+        self.dot.create_oval(1, 1, 11, 11, fill=color, outline="")
 
+    # ---- model load ----
     def _load_model(self):
         try:
             self.model.load()
@@ -608,9 +733,11 @@ class RevereApp:
 
     def _model_ready(self):
         self.set_conn("ready", OK)
-        self.set_status("Ready - start the camera to begin monitoring")
-        self.btn_start.config(state="normal")
+        self.set_status("Ready — choose a source to begin")
+        self.btn_file.config(state="normal")
+        self.btn_cam.config(state="normal")
 
+    # ---- logging + status ----
     def log(self, msg, color=TEXT):
         ts = datetime.datetime.now().strftime("%H:%M:%S")
         self.logbox.config(state="normal")
@@ -626,44 +753,52 @@ class RevereApp:
         self.status_var.set(text)
 
     def set_conn(self, text, color):
-        self.conn.config(text=text, fg=color); self._dot(color)
+        self.conn.config(text=text, fg=color)
+        self._dot(color)
 
+    # ---- event bridge (worker thread -> UI thread) ----
     def on_event(self, kind, message):
         self.root.after(0, lambda: self._handle(kind, message))
 
     def _handle(self, kind, message):
-        colors = {"log": MUTED, "start": BLUE, "green": OK, "yellow": WARN, "red": DANGER,
-                  "sending": BLUE, "sent": OK, "error": DANGER, "done": MUTED}
+        colors = {"log": MUTED, "start": BLUE, "detect": WARN, "clip": TEAL,
+                  "sending": BLUE, "sent": OK, "error": DANGER, "none": MUTED, "done": OK}
         if message:
             self.log(message, colors.get(kind, TEXT))
-            if kind not in ("log", "green"):
+            if kind != "log":
                 self.set_status(message)
         if kind == "start":
-            self.set_conn("monitoring", WARN)
-            self.btn_start.config(state="disabled"); self.btn_stop.config(state="normal")
-        elif kind == "green":
-            self.zone_chip.config(text="GREEN", bg="#22c55e", fg="#042")
-        elif kind == "yellow":
-            self.zone_chip.config(text="YELLOW", bg="#f59e0b", fg="#2a1a00")
-        elif kind == "red":
-            self.zone_chip.config(text="RED", bg="#ef4444", fg="#2a0000")
+            self.set_conn("working", WARN); self._busy(True)
+        elif kind == "detect":
+            crime = message.split()[1]
+            self.chip.config(text=f"⚠ {crime}", bg="#2a1313", fg="#fca5a5")
         elif kind == "sent":
             self.set_conn("delivered", OK)
         elif kind == "error":
             self.set_conn("error", DANGER)
         elif kind == "done":
-            self.set_conn("ready", OK)
-            self.btn_start.config(state="normal"); self.btn_stop.config(state="disabled")
+            self.set_conn("ready", OK); self._busy(False)
 
-    def on_start(self):
+    def _busy(self, busy):
+        # camera keeps its own stop button via the preview window; just gate file btn
+        self.btn_file.config(state="disabled" if busy else "normal")
+
+    # ---- actions ----
+    def on_file(self):
         if not self.model.ready:
             return
+        path = askopenfilename(title="Select a video file",
+                               filetypes=[("Video files", "*.mp4 *.avi *.mov *.mkv *.webm")])
+        if path:
+            self.chip.config(text="No incident", bg=PANEL2, fg=MUTED)
+            FileAnalyzer(self.model, path, on_event=self.on_event).start()
+
+    def on_camera(self):
+        if not self.model.ready:
+            return
+        self.chip.config(text="No incident", bg=PANEL2, fg=MUTED)
         self.camera = CameraAnalyzer(self.model, on_event=self.on_event)
         self.camera.start()
-
-    def on_stop(self):
-        if self.camera:
-            self.camera.stop()
 
 
 def main():
