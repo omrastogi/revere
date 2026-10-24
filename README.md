@@ -1,5 +1,7 @@
 # REVERE — Boston Crime Intelligence Platform
 
+![REVERE detector on UCF-Crime clips: RED alerts for abuse, assault and armed robbery, GREEN for normal street footage](asset/preview_grid.jpg)
+
 REVERE is a real-time, AI-assisted crime-awareness platform for Boston. A
 computer-vision detector flags incidents from CCTV/camera feeds and streams them
 — with the video clip and metadata — to a FastAPI backend over WebSockets. The
@@ -13,6 +15,8 @@ backend powers two experiences:
   triage. Verified incidents are what the public sees.
 
 ## Architecture
+
+![Detection flow: camera stream → fine-tuned V-JEPA 2 → crime detection head → crime type (Head B) and what is happening + severity (Head C, dictionary) → alert](asset/flowchart.png)
 
 ```
  Detector (revere_websocket_new.py)     Backend (server.py)                Browsers
@@ -231,6 +235,7 @@ The server replies `{"ok": true, "id": "<detection id>"}`.
 | `seed_demo.py`            | Bulk demo-data seeder                             |
 | `poc/`                    | V-JEPA 2 training pipeline + checkpoints          |
 | `requirements.txt`        | Python dependencies                               |
+| `asset/`                  | README images (teaser, flowchart)                 |
 | `clips/`                  | Saved video clips (runtime; git-ignored)          |
 
 ---
