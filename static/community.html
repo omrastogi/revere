@@ -3,229 +3,853 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>REVERE — Boston Community Safety</title>
+<title>Revere — Boston Community Safety</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <style>
   :root{
-    --bg:#0b1220; --panel:#131c2b; --panel2:#1a2538; --line:#243247;
-    --text:#e8eef6; --muted:#8aa0b8; --accent:#2dd4bf; --accent2:#60a5fa;
-    --low:#22c55e; --mid:#f59e0b; --high:#ef4444;
+    /* Grey/white page with navy (#153D59) as the complement color */
+    --bg:#f3f4f6; --panel:#ffffff; --panel2:#f6f7f9; --line:#dfe3e8; --rule:#eceff2;
+    --text:#1f2933; --muted:#5f6b7a; --faint:#8a94a1;
+    --navy:#153D59; --navy-dark:#0f2d42; --navy-tint:#e8eef4; --navy-sel:#eef3f8;
+    --low:#2f7d4f; --mid:#b45309; --high:#e8262b;
   }
-  *{box-sizing:border-box;margin:0;padding:0;font-family:'Segoe UI',system-ui,sans-serif;}
+  *{box-sizing:border-box;margin:0;padding:0;font-family:'Inter','Segoe UI',system-ui,sans-serif;}
   body{background:var(--bg);color:var(--text);}
   a{color:inherit;text-decoration:none;}
-  .topbar{
-    display:flex;align-items:center;justify-content:space-between;
-    padding:16px 28px;background:linear-gradient(90deg,#0d1627,#122034);
-    border-bottom:1px solid var(--line);position:sticky;top:0;z-index:500;
-  }
-  .brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:1.25rem;letter-spacing:.3px;}
-  .brand .eye{width:30px;height:30px;border-radius:50%;
-    background:radial-gradient(circle at 50% 50%,var(--accent),#0d9488);
-    display:flex;align-items:center;justify-content:center;font-size:16px;color:#042;}
-  .brand small{color:var(--muted);font-weight:500;font-size:.72rem;display:block;}
-  .nav{display:flex;gap:10px;align-items:center;}
-  .btn{padding:9px 18px;border-radius:10px;border:1px solid var(--line);
-    background:var(--panel2);color:var(--text);cursor:pointer;font-weight:600;font-size:.9rem;transition:.15s;}
-  .btn:hover{border-color:var(--accent2);}
-  .btn.primary{background:var(--accent2);border-color:var(--accent2);color:#06101f;}
-  .hero{padding:36px 28px 10px;}
-  .hero h1{font-size:2rem;font-weight:800;}
-  .hero p{color:var(--muted);margin-top:6px;max-width:680px;line-height:1.5;}
-  .live-pill{display:inline-flex;align-items:center;gap:7px;margin-top:14px;
-    background:#0f1d16;border:1px solid #1f7a4d;color:#4ade80;padding:5px 12px;border-radius:999px;font-size:.8rem;}
-  .live-pill .d{width:8px;height:8px;border-radius:50%;background:#4ade80;box-shadow:0 0 8px #4ade80;animation:pulse 1.6s infinite;}
+  button,select,input{font:inherit;}
+  :focus-visible{outline:2px solid var(--navy);outline-offset:2px;}
+  .icon{width:16px;height:16px;flex-shrink:0;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
+
+  /* ---------- Top bar ---------- */
+  .topbar{display:flex;align-items:center;justify-content:space-between;height:58px;padding:0 24px;
+    background:var(--navy);color:#fff;position:sticky;top:0;z-index:1000;}
+  .left-nav{display:flex;align-items:center;gap:34px;height:100%;}
+  .brand{display:flex;align-items:center;gap:10px;font-size:1.25rem;font-weight:600;letter-spacing:.2px;}
+  .brand .logo{width:32px;height:32px;border-radius:0;background:rgba(255,255,255,.12);
+    display:flex;align-items:center;justify-content:center;}
+  .brand .logo .icon{width:20px;height:20px;}
+  .tabs{display:flex;height:100%;gap:22px;}
+  .tabs a{display:flex;align-items:center;gap:8px;font-size:.88rem;color:#c9d6e2;height:100%;
+    border-bottom:2px solid transparent;padding-top:2px;}
+  .tabs a:hover{color:#fff;}
+  .tabs a[aria-current="page"]{color:#fff;border-bottom-color:#fff;}
+  .right-nav{display:flex;align-items:center;gap:18px;font-size:.86rem;}
+  .right-nav .place{display:flex;align-items:center;gap:6px;color:#e3eaf1;}
+  .right-nav .divider{width:1px;height:22px;background:rgba(255,255,255,.2);}
+  .login-btn{padding:7px 14px;border-radius:0;background:#fff;color:var(--navy);font-weight:600;font-size:.84rem;}
+  .login-btn:hover{background:#e8eef4;}
+
+  /* ---------- Notice bar ---------- */
+  .notice{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 24px;
+    background:#fff;border-bottom:1px solid var(--line);font-size:.78rem;color:var(--text);}
+  .notice .em{display:flex;align-items:center;gap:8px;}
+  .notice .em .icon{color:var(--high);width:14px;height:14px;}
+  .notice .status{color:var(--navy);font-weight:700;font-size:.7rem;letter-spacing:.5px;text-transform:uppercase;
+    display:flex;align-items:center;gap:6px;}
+  .notice .status .d{width:6px;height:6px;border-radius:50%;background:var(--faint);}
+  .notice .status.live .d{background:#2f9e5f;animation:pulse 1.6s infinite;}
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
-  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;padding:20px 28px;}
-  .stat{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px;}
-  .stat .n{font-size:2rem;font-weight:800;}
-  .stat .l{color:var(--muted);font-size:.82rem;margin-top:2px;}
-  .grid{display:grid;grid-template-columns:1.4fr 1fr;gap:18px;padding:8px 28px 40px;}
-  .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;overflow:hidden;}
-  .card h3{padding:16px 20px;border-bottom:1px solid var(--line);font-size:1rem;font-weight:700;
+
+  .page{max-width:1320px;margin:0 auto;padding:26px 24px 40px;}
+
+  /* ---------- Hero ---------- */
+  .hero{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;}
+  .hero h1{font-size:1.65rem;font-weight:700;color:var(--navy-dark);letter-spacing:-.2px;}
+  .hero p{color:var(--muted);margin-top:6px;font-size:.88rem;}
+  .hero .meta{text-align:right;flex-shrink:0;}
+  .pill{display:inline-flex;align-items:center;gap:6px;background:var(--navy-tint);color:var(--navy);
+    font-size:.72rem;font-weight:600;padding:4px 10px;border-radius:0;}
+  .pill .d{width:6px;height:6px;border-radius:50%;background:var(--navy);}
+  .hero .stamp{color:var(--muted);font-size:.74rem;margin-top:8px;}
+
+  /* ---------- Filters ---------- */
+  .filters{display:flex;flex-wrap:wrap;align-items:flex-end;gap:14px 16px;margin:24px 0 16px;}
+  .fgroup{display:flex;flex-direction:column;gap:6px;}
+  .flabel{color:var(--muted);font-size:.66rem;font-weight:600;text-transform:uppercase;letter-spacing:.5px;}
+  .seg{display:inline-flex;background:#e6e9ed;border-radius:0;padding:3px;width:214px;}
+  .seg button{flex:1;border:none;background:transparent;color:var(--muted);padding:7px 0;font-size:.8rem;
+    border-radius:0;cursor:pointer;}
+  .seg button[aria-pressed="true"]{background:var(--navy);color:#fff;font-weight:600;}
+  .selwrap{position:relative;display:flex;align-items:center;}
+  .selwrap .icon{position:absolute;left:10px;color:var(--muted);pointer-events:none;width:14px;height:14px;}
+  .selwrap::after{content:"";position:absolute;right:12px;width:6px;height:6px;border-right:1.6px solid var(--muted);
+    border-bottom:1.6px solid var(--muted);transform:rotate(45deg) translateY(-2px);pointer-events:none;}
+  .selwrap select{appearance:none;-webkit-appearance:none;background:#fff;border:1px solid var(--line);border-radius:0;
+    padding:8px 32px 8px 32px;font-size:.8rem;color:var(--text);min-width:170px;cursor:pointer;}
+  .selwrap select:disabled{color:var(--faint);background:var(--panel2);cursor:not-allowed;}
+  .check{display:flex;align-items:center;gap:8px;font-size:.8rem;height:35px;cursor:pointer;}
+  .check input{width:15px;height:15px;accent-color:var(--navy);cursor:pointer;}
+  .reset{margin-left:auto;align-self:center;margin-top:18px;background:none;border:none;color:var(--navy);
+    font-size:.8rem;font-weight:600;cursor:pointer;}
+  .reset:hover{text-decoration:underline;}
+
+  /* ---------- Explorer: list + map ---------- */
+  .explorer{display:grid;grid-template-columns:300px 1fr;height:700px;background:#fff;border:1px solid var(--line);
+    border-radius:0;overflow:hidden;}
+  .list{display:flex;flex-direction:column;border-right:1px solid var(--line);min-height:0;}
+  .list-head{padding:16px 16px;font-size:.88rem;border-bottom:1px solid var(--line);}
+  .list-body{flex:1;overflow:auto;}
+  .group{padding:8px 16px;background:var(--panel2);border-bottom:1px solid var(--line);color:var(--muted);
+    font-size:.64rem;font-weight:600;letter-spacing:.5px;text-transform:uppercase;}
+  .item{display:block;width:100%;text-align:left;border:none;background:#fff;border-bottom:1px solid var(--rule);
+    border-left:3px solid transparent;padding:12px 14px 12px 13px;cursor:pointer;color:var(--text);}
+  .item:hover{background:#fafbfc;}
+  .item[aria-current="true"]{background:var(--navy-sel);border-left-color:var(--navy);}
+  .item .row1{display:flex;align-items:center;gap:8px;font-weight:600;font-size:.84rem;}
+  .item .row1 .chev{margin-left:auto;color:var(--navy);visibility:hidden;}
+  .item[aria-current="true"] .row1 .chev{visibility:visible;}
+  .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+  .dot.low{background:var(--low);} .dot.mid{background:var(--mid);} .dot.high{background:var(--high);}
+  .dot.hist{background:#fff;border:1.5px solid var(--faint);}
+  .item .loc{font-size:.76rem;color:var(--muted);margin:4px 0 0 16px;}
+  .item .row3{display:flex;justify-content:space-between;font-size:.72rem;color:var(--muted);margin:4px 0 0 16px;}
+  .item .row3 .lvl.low{color:var(--low);} .item .row3 .lvl.mid{color:var(--mid);}
+  .item .row3 .lvl.high{color:var(--high);} .item .row3 .lvl.hist{color:var(--faint);}
+  .item .recv{font-size:.7rem;color:var(--faint);margin:4px 0 0 16px;font-family:ui-monospace,'SF Mono',Menlo,monospace;}
+  .empty{padding:22px 16px;color:var(--muted);font-size:.82rem;}
+  .list-foot{padding:12px 16px;border-top:1px solid var(--line);font-size:.68rem;color:var(--muted);line-height:1.5;}
+  .list-foot b{color:var(--text);font-weight:600;}
+  /* ---------- Map area ---------- */
+  .map-col{display:flex;flex-direction:column;min-width:0;min-height:0;}
+  .map-wrap{position:relative;flex:1;min-height:0;}
+  #map{position:absolute;inset:0;}
+  /* Light, muted basemap: Esri World Street Map (keyless), desaturated in CSS so
+     land reads pale grey, streets white, parks soft green, water soft blue. */
+  .leaflet-container{background:#eef0ee;font:inherit;}
+  .leaflet-tile-pane{filter:saturate(.85) brightness(1.06) contrast(1.02);}
+  .leaflet-control-attribution{background:rgba(255,255,255,.8)!important;color:var(--muted);font-size:.64rem;border-radius:0!important;}
+  .leaflet-control-attribution a{color:var(--muted);}
+  .leaflet-control-scale-line{border:1.5px solid #6b7480;border-top:none;background:rgba(255,255,255,.7);
+    color:#3c4652;font-size:.64rem;font-weight:600;line-height:1.3;}
+  .leaflet-bar{border:none!important;box-shadow:0 1px 4px rgba(16,24,40,.18)!important;border-radius:0!important;}
+  .leaflet-bar a{width:34px!important;height:34px!important;line-height:34px!important;font-size:1.1rem!important;
+    background:#fff;color:var(--text);border-bottom:1px solid var(--rule)!important;border-radius:0!important;}
+  .leaflet-bar a:hover{background:var(--panel2);}
+
+  /* Floating map overlays */
+  .map-search{position:absolute;top:16px;left:16px;z-index:800;display:flex;align-items:center;gap:8px;width:270px;
+    background:#fff;box-shadow:0 1px 4px rgba(16,24,40,.18);padding:0 12px;}
+  .map-search .icon{color:var(--muted);}
+  .map-search input{border:none;outline:none;flex:1;padding:11px 0;font-size:.82rem;color:var(--text);background:transparent;}
+  .map-search:focus-within{box-shadow:0 0 0 2px var(--navy);}
+  .search-msg{position:absolute;top:60px;left:16px;z-index:800;background:#fff;font-size:.74rem;color:var(--muted);
+    padding:6px 10px;box-shadow:0 1px 4px rgba(16,24,40,.18);display:none;}
+  .north{position:absolute;top:16px;right:16px;z-index:700;width:28px;text-align:center;color:var(--navy-dark);
+    font-size:.62rem;font-weight:700;pointer-events:none;}
+  .north svg{width:16px;height:18px;display:block;margin:2px auto 0;fill:var(--navy-dark);}
+  .legend{position:absolute;left:16px;bottom:38px;z-index:700;background:#fff;box-shadow:0 1px 4px rgba(16,24,40,.18);
+    padding:10px 14px;font-size:.74rem;}
+  .legend .t{color:var(--muted);font-size:.6rem;font-weight:600;letter-spacing:.5px;text-transform:uppercase;margin-bottom:6px;}
+  .legend ul{list-style:none;display:flex;gap:14px;}
+  .legend li{display:flex;align-items:center;gap:6px;}
+
+  /* Incident markers (Leaflet divIcons) */
+  .inc-marker{background:none;border:none;}
+  .pin{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    border:2px solid #fff;box-shadow:0 1px 3px rgba(16,24,40,.35);color:#fff;transition:transform .12s;}
+  .pin svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}
+  .pin.low{background:var(--low);} .pin.mid{background:var(--mid);} .pin.high{background:var(--high);}
+  .pin.hist{background:#fff;color:#6b7480;border:1.5px solid #8a94a1;}
+  .inc-marker:hover .pin{transform:scale(1.08);}
+  .inc-marker.sel .pin{box-shadow:0 0 0 9px rgba(161,96,27,.18),0 0 0 18px rgba(161,96,27,.10),0 1px 3px rgba(16,24,40,.35);}
+  .inc-marker.sel.low .pin{box-shadow:0 0 0 9px rgba(47,111,90,.18),0 0 0 18px rgba(47,111,90,.10);}
+  .inc-marker.sel.high .pin{box-shadow:0 0 0 9px rgba(176,58,46,.18),0 0 0 18px rgba(176,58,46,.10);}
+  .inc-marker.sel.hist .pin{box-shadow:0 0 0 9px rgba(107,116,128,.18),0 0 0 18px rgba(107,116,128,.10);}
+  .leaflet-tooltip.pin-label{background:#fff;border:none;border-radius:0;box-shadow:0 1px 4px rgba(16,24,40,.18);
+    color:var(--text);font-size:.76rem;font-weight:600;padding:6px 10px;}
+  .leaflet-tooltip.pin-label::before{display:none;}
+  .search-pin{width:14px;height:14px;border-radius:50%;background:var(--navy);border:3px solid #fff;box-shadow:0 0 0 2px var(--navy);}
+
+  /* Detail panel */
+  .detail{position:absolute;top:16px;right:56px;bottom:16px;z-index:900;width:310px;background:#fff;
+    box-shadow:0 4px 16px rgba(16,24,40,.18);display:none;flex-direction:column;overflow:auto;}
+  .detail.open{display:flex;}
+  .detail .dh{display:flex;justify-content:space-between;align-items:center;padding:16px 18px 0;}
+  .detail .ref{font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:.66rem;color:var(--muted);letter-spacing:.4px;text-transform:uppercase;}
+  .detail .close{background:none;border:none;cursor:pointer;color:var(--muted);width:28px;height:28px;display:flex;align-items:center;justify-content:center;}
+  .detail .close:hover{color:var(--text);background:var(--panel2);}
+  .detail h4{font-size:1.3rem;font-weight:700;color:var(--navy-dark);padding:8px 18px 0;}
+  .detail .where{font-size:.82rem;color:var(--muted);padding:4px 18px 0;}
+  .chips{display:flex;gap:8px;padding:12px 18px 0;}
+  .chip{display:inline-flex;align-items:center;gap:6px;font-size:.72rem;font-weight:600;padding:4px 9px;}
+  .chip .d{width:6px;height:6px;border-radius:50%;background:currentColor;}
+  .chip.cur{background:var(--navy-tint);color:var(--navy);}
+  .chip.hist{background:var(--panel2);color:var(--muted);}
+  .chip.low{background:#e6f2ec;color:#2f6f5a;} .chip.mid{background:#fbefdf;color:#8a4f12;} .chip.high{background:#f8e4e1;color:#9c3127;}
+  .detail .desc{font-size:.8rem;color:var(--muted);line-height:1.55;padding:12px 18px 14px;border-bottom:1px solid var(--rule);margin:0 0 0;}
+  .facts{display:grid;grid-template-columns:1fr 1fr;gap:12px 14px;padding:14px 18px 0;}
+  .facts .k{font-size:.6rem;font-weight:600;letter-spacing:.5px;text-transform:uppercase;color:var(--muted);}
+  .facts .v{font-size:.84rem;color:var(--text);margin-top:3px;}
+  .facts .wide{grid-column:1/-1;}
+  .facts .mono{font-family:ui-monospace,'SF Mono',Menlo,monospace;}
+  .detail .upd{font-size:.68rem;color:var(--faint);padding:10px 18px 0;}
+  .assess{margin:14px 18px 18px;padding:10px 12px;background:#fbefdf;color:#7a4510;font-size:.72rem;line-height:1.5;}
+  .assess b{display:block;font-size:.76rem;color:#8a4f12;margin-bottom:2px;}
+  .detail .zoom-to{margin:0 18px 18px;padding:11px 0;border:none;background:var(--navy);color:#fff;font-weight:600;
+    font-size:.84rem;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;}
+  .detail .zoom-to:hover{background:var(--navy-dark);}
+
+  /* Explore over time */
+  .timeline{display:grid;grid-template-columns:150px 1fr;gap:18px;align-items:end;padding:12px 18px 10px;
+    border-top:1px solid var(--line);background:#fff;}
+  .timeline .tl-title{font-size:.84rem;color:var(--text);padding-bottom:16px;}
+  .timeline .tl-title small{display:block;color:var(--muted);font-size:.7rem;margin-top:3px;}
+  .bars{display:flex;align-items:flex-end;gap:2px;height:46px;}
+  .bars i{flex:1;background:#cfd6de;min-height:2px;}
+  .bars i.on{background:var(--navy);}
+  .bars i.zero{background:#e6e9ed;}
+  .track{position:relative;height:3px;background:#dfe3e8;margin-top:4px;}
+  .track .fill{position:absolute;top:0;bottom:0;background:var(--navy);}
+  .track .knob{position:absolute;top:50%;width:11px;height:11px;border-radius:50%;background:#fff;border:2px solid var(--navy);
+    transform:translate(-50%,-50%);}
+  .ticks{display:flex;justify-content:space-between;font-size:.64rem;color:var(--muted);margin-top:6px;}
+
+  /* ---------- Overview (stats, ranks, chart, feed) ---------- */
+  .section-title{font-size:1.05rem;font-weight:700;color:var(--navy-dark);margin:36px 0 14px;}
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;}
+  .stat{background:#fff;border:1px solid var(--line);border-radius:0;padding:16px 18px;}
+  .stat .n{font-size:1.7rem;font-weight:700;color:var(--navy);}
+  .stat .l{color:var(--muted);font-size:.78rem;margin-top:2px;}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px;}
+  .card{background:#fff;border:1px solid var(--line);border-radius:0;overflow:hidden;}
+  .card h3{padding:14px 18px;border-bottom:1px solid var(--line);font-size:.92rem;font-weight:700;color:var(--navy-dark);
     display:flex;justify-content:space-between;align-items:center;}
-  .card h3 small{color:var(--muted);font-weight:500;}
-  #map{height:460px;width:100%;}
-  .leaflet-container{background:#0a1018;}
-  /* Make the free OSM tiles look dark to match the UI (pure CSS, no key). */
-  .leaflet-tile-pane{filter:invert(1) hue-rotate(185deg) brightness(.92) contrast(.9);}
-  .ranklist{padding:8px 0;max-height:460px;overflow:auto;}
-  .rank{display:flex;align-items:center;gap:12px;padding:11px 20px;border-bottom:1px solid #1b2636;}
-  .rank:hover{background:var(--panel2);}
-  .rank .bar{flex:1;height:8px;border-radius:6px;background:#1b2636;overflow:hidden;}
-  .rank .bar i{display:block;height:100%;border-radius:6px;}
-  .rank .hood{width:130px;font-weight:600;font-size:.92rem;}
-  .rank .cnt{width:70px;text-align:right;color:var(--muted);font-size:.82rem;}
-  .sev{font-size:.7rem;padding:2px 8px;border-radius:6px;font-weight:700;}
-  .sev.low{background:#0f2a1a;color:var(--low);}
-  .sev.mid{background:#2a220f;color:var(--mid);}
-  .sev.high{background:#2a1313;color:var(--high);}
-  .feed{padding:8px 20px 16px;max-height:460px;overflow:auto;}
-  .inc{display:flex;gap:12px;align-items:flex-start;padding:12px 0;border-bottom:1px solid #1b2636;}
-  .inc .tag{font-size:.72rem;font-weight:700;padding:3px 9px;border-radius:7px;background:#2a1313;color:#fca5a5;white-space:nowrap;}
-  .inc .meta{font-size:.85rem;color:var(--muted);line-height:1.5;}
+  .card h3 small{color:var(--muted);font-weight:500;font-size:.74rem;}
+  .ranklist{max-height:340px;overflow:auto;}
+  .rank{display:flex;align-items:center;gap:12px;padding:10px 18px;border-bottom:1px solid var(--rule);}
+  .rank .bar{flex:1;height:7px;border-radius:0;background:var(--rule);overflow:hidden;}
+  .rank .bar i{display:block;height:100%;border-radius:0;background:var(--navy);}
+  .rank .hood{width:120px;font-weight:600;font-size:.84rem;}
+  .rank .cnt{width:74px;text-align:right;color:var(--muted);font-size:.78rem;}
+  .sev{font-size:.68rem;padding:2px 7px;border-radius:0;font-weight:700;}
+  .sev.low{background:#e7f5ec;color:var(--low);}
+  .sev.mid{background:#fdf1e3;color:var(--mid);}
+  .sev.high{background:#fbe9e9;color:var(--high);}
+  .feed{padding:4px 18px 12px;max-height:340px;overflow:auto;}
+  .inc{display:flex;gap:12px;align-items:flex-start;padding:11px 0;border-bottom:1px solid var(--rule);}
+  .inc .tag{font-size:.7rem;font-weight:700;padding:3px 9px;border-radius:0;background:var(--navy-tint);color:var(--navy);white-space:nowrap;}
+  .inc .meta{font-size:.8rem;color:var(--muted);line-height:1.5;}
   .inc .meta b{color:var(--text);}
-  .charts{display:grid;grid-template-columns:1fr 1fr;gap:18px;padding:0 28px 40px;}
-  .foot{padding:22px 28px;color:var(--muted);font-size:.8rem;border-top:1px solid var(--line);text-align:center;}
-  @media(max-width:900px){.grid,.charts,.stats{grid-template-columns:1fr;}}
+  .foot{padding:20px 24px;color:var(--muted);font-size:.74rem;border-top:1px solid var(--line);text-align:center;background:#fff;}
+
+  @media(max-width:900px){
+    .tabs,.right-nav .place,.right-nav .divider{display:none;}
+    .hero{flex-direction:column;} .hero .meta{text-align:left;}
+    .explorer{grid-template-columns:1fr;height:auto;}
+    .list{border-right:none;border-bottom:1px solid var(--line);max-height:380px;}
+    .map-wrap{height:520px;flex:none;}
+    .detail{left:16px;right:16px;width:auto;}
+    .legend ul{flex-wrap:wrap;}
+    .map-search{width:calc(100% - 76px);}
+    .timeline{grid-template-columns:1fr;}
+    .stats,.grid2{grid-template-columns:1fr 1fr;}
+    .reset{margin-left:0;}
+  }
+  @media(max-width:560px){ .stats,.grid2{grid-template-columns:1fr;} }
 </style>
 </head>
 <body>
-  <div class="topbar">
-    <a href="/" class="brand">
-      <span class="eye">◉</span>
-      <div>REVERE <small>Boston Community Safety</small></div>
-    </a>
-    <div class="nav">
-      <a class="btn" href="/">Community</a>
-      <a class="btn primary" href="/login">Officials Login →</a>
+  <!-- Inline icon sprite -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-radar" viewBox="0 0 24 24"><circle cx="12" cy="11" r="2"/><path d="M8.5 7.5a5 5 0 0 0 0 7M15.5 7.5a5 5 0 0 1 0 7M5.6 4.6a9 9 0 0 0 0 12.8M18.4 4.6a9 9 0 0 1 0 12.8M12 13v8"/></symbol>
+    <symbol id="i-chat" viewBox="0 0 24 24"><path d="M4 5h11v8H8l-4 3z"/><path d="M15 9h5v8l-3-2h-6v-2"/></symbol>
+    <symbol id="i-map" viewBox="0 0 24 24"><path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z"/><path d="M9 4v14M15 6v14"/></symbol>
+    <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></symbol>
+    <symbol id="i-phone" viewBox="0 0 24 24"><path d="M5 3h4l2 5-2.5 1.5a11 11 0 0 0 6 6L16 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 5a2 2 0 0 1 2-2z"/></symbol>
+    <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></symbol>
+    <symbol id="i-chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+    <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></symbol>
+  </svg>
+
+  <header class="topbar">
+    <div class="left-nav">
+      <a href="/" class="brand" aria-label="Revere home">
+        <span class="logo"><svg class="icon"><use href="#i-radar"/></svg></span>
+        Revere
+      </a>
+      <nav class="tabs" aria-label="Primary">
+        <a href="#overview"><svg class="icon"><use href="#i-chat"/></svg>Community</a>
+        <a href="#explorer" aria-current="page"><svg class="icon"><use href="#i-map"/></svg>Incident map</a>
+      </nav>
     </div>
+    <div class="right-nav">
+      <span class="place"><svg class="icon"><use href="#i-pin"/></svg>Boston, MA</span>
+      <span class="divider" aria-hidden="true"></span>
+      <a class="login-btn" href="/login">Officials login</a>
+    </div>
+  </header>
+
+  <div class="notice" role="note">
+    <span class="em"><svg class="icon"><use href="#i-phone"/></svg>In an emergency, call 911. Revere is not an emergency dispatch service.</span>
+    <span class="status" id="liveStatus"><span class="d"></span><span id="liveText">Connecting…</span></span>
   </div>
 
-  <div class="hero">
-    <h1>How safe is your neighborhood?</h1>
-    <p>Real-time, AI-assisted crime awareness across Boston. Explore incident
-       rates in Roxbury, Dorchester, Mattapan and more — no account needed.</p>
-    <span class="live-pill"><span class="d"></span> <span id="liveText">connecting…</span></span>
-  </div>
+  <main class="page">
+    <section class="hero">
+      <div>
+        <h1>Local activity, in perspective.</h1>
+        <p>Explore current and historical incidents across Boston neighborhoods, verified by officials.</p>
+      </div>
+      <div class="meta">
+        <span class="pill"><span class="d"></span>Verified incidents</span>
+        <div class="stamp" id="stamp">—</div>
+      </div>
+    </section>
 
-  <div class="stats">
-    <div class="stat"><div class="n" id="s-total">0</div><div class="l">Total incidents tracked</div></div>
-    <div class="stat"><div class="n" id="s-verified">0</div><div class="l">Verified by officials</div></div>
-    <div class="stat"><div class="n" id="s-hoods">0</div><div class="l">Neighborhoods monitored</div></div>
-    <div class="stat"><div class="n" id="s-top">—</div><div class="l">Highest-activity area</div></div>
-  </div>
+    <form class="filters" aria-label="Incident filters" onsubmit="return false;">
+      <div class="fgroup">
+        <span class="flabel" id="periodLabel">Explore incidents</span>
+        <div class="seg" role="group" aria-labelledby="periodLabel">
+          <button type="button" data-period="current" aria-pressed="true">Current</button>
+          <button type="button" data-period="historical" aria-pressed="false">Historical</button>
+        </div>
+      </div>
+      <div class="fgroup">
+        <label class="flabel" for="fDate">Date range</label>
+        <div class="selwrap"><svg class="icon"><use href="#i-cal"/></svg>
+          <select id="fDate" disabled>
+            <option value="all">All older than 24h</option>
+            <option value="3">Last 3 days</option>
+            <option value="7">Last 7 days</option>
+            <option value="30">Last 30 days</option>
+            <option value="90">Last 90 days</option>
+            <option value="365">Last 12 months</option>
+          </select>
+        </div>
+      </div>
+      <div class="fgroup">
+        <label class="flabel" for="fTime">Time window · ET</label>
+        <div class="selwrap"><svg class="icon"><use href="#i-clock"/></svg>
+          <select id="fTime">
+            <option value="any">Any time</option>
+            <option value="morning">06:00 – 12:00</option>
+            <option value="afternoon">12:00 – 17:00</option>
+            <option value="evening">17:00 – 21:00</option>
+            <option value="night">21:00 – 06:00</option>
+          </select>
+        </div>
+      </div>
+      <div class="fgroup">
+        <label class="flabel" for="fType">Incident type</label>
+        <div class="selwrap"><svg class="icon"><use href="#i-sliders"/></svg>
+          <select id="fType"><option value="all">All types</option></select>
+        </div>
+      </div>
+      <label class="check"><input type="checkbox" id="fInclHist" /> Include historical</label>
+      <button type="button" class="reset" id="fReset">Reset filters</button>
+    </form>
 
-  <div class="grid">
-    <div class="card">
-      <h3>Neighborhood crime map <small id="mapNote">heat = severity-weighted activity</small></h3>
-      <div id="map"></div>
-    </div>
-    <div class="card">
-      <h3>Crime rate by neighborhood</h3>
-      <div class="ranklist" id="ranklist"></div>
-    </div>
-  </div>
+    <section class="explorer" id="explorer" aria-label="Incident explorer">
+      <div class="list">
+        <div class="list-head" id="listHead" aria-live="polite">0 incidents in view</div>
+        <div class="list-body" id="listBody"><div class="empty">Connecting…</div></div>
+        <div class="list-foot">
+          <b>All times: Eastern Time</b><br>
+          Map locations are approximate to protect privacy. Do not use this map for emergency response.
+        </div>
+      </div>
+      <div class="map-col">
+        <div class="map-wrap">
+          <div id="map" role="region" aria-label="Incident map"></div>
 
-  <div class="charts">
-    <div class="card">
-      <h3>Incidents by type</h3>
-      <div style="padding:18px;"><canvas id="crimeChart" height="220"></canvas></div>
-    </div>
-    <div class="card">
-      <h3>Recent verified incidents <small>public feed</small></h3>
-      <div class="feed" id="feed"><div style="color:var(--muted);padding:20px;">No verified incidents yet.</div></div>
-    </div>
-  </div>
+          <form class="map-search" id="searchForm" role="search" onsubmit="return false;">
+            <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>
+            <input id="searchInput" type="search" placeholder="Find an address or coordinates"
+                   aria-label="Find an address or coordinates" autocomplete="off" />
+          </form>
+          <div class="search-msg" id="searchMsg" role="status"></div>
 
-  <div class="foot">
-    REVERE is a public-awareness tool. Figures reflect AI detections reviewed by officials and may not represent official police statistics.
-  </div>
+          <div class="north" aria-hidden="true">N<svg viewBox="0 0 16 18"><path d="M8 0l7 18-7-5-7 5z"/></svg></div>
+
+          <div class="legend" aria-label="Map legend">
+            <div class="t">Concern level · verified</div>
+            <ul>
+              <li><span class="dot low"></span>Low</li>
+              <li><span class="dot mid"></span>Moderate</li>
+              <li><span class="dot high"></span>High</li>
+              <li><span class="dot hist"></span>Historical</li>
+            </ul>
+          </div>
+
+          <aside class="detail" id="detail" aria-labelledby="dTitle" aria-live="polite"></aside>
+        </div>
+
+        <div class="timeline" aria-label="Explore over time">
+          <div class="tl-title">Explore over time<small id="tlRange">—</small></div>
+          <div>
+            <div class="bars" id="tlBars" role="img" aria-label="Incidents per time interval"></div>
+            <div class="track"><div class="fill" id="tlFill"></div><div class="knob" id="tlKnob"></div></div>
+            <div class="ticks" id="tlTicks"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <h2 class="section-title" id="overview">Neighborhood overview</h2>
+    <div class="stats">
+      <div class="stat"><div class="n" id="s-total">0</div><div class="l">Total incidents tracked</div></div>
+      <div class="stat"><div class="n" id="s-verified">0</div><div class="l">Verified by officials</div></div>
+      <div class="stat"><div class="n" id="s-hoods">0</div><div class="l">Neighborhoods with activity</div></div>
+      <div class="stat"><div class="n" id="s-top">—</div><div class="l">Highest-activity area</div></div>
+    </div>
+    <div class="grid2">
+      <div class="card">
+        <h3>Crime rate by neighborhood <small>severity-weighted</small></h3>
+        <div class="ranklist" id="ranklist"></div>
+      </div>
+      <div class="card">
+        <h3>Incidents by type</h3>
+        <div style="padding:16px;"><canvas id="crimeChart" height="220"></canvas></div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:14px;">
+      <h3>Latest verified incidents <small>public feed</small></h3>
+      <div class="feed" id="feed"><div class="empty">No verified incidents yet.</div></div>
+    </div>
+  </main>
+
+  <footer class="foot">
+    Revere is a public-awareness tool. Figures reflect AI detections reviewed by officials and may not represent official police statistics.
+  </footer>
 
 <script>
-const NEIGH = {}; // name -> marker
-let map, crimeChart;
+let map, dotLayer, crimeChart;
+const INCIDENTS = new Map();   // id -> verified public incident
+const HOOD_CENTERS = {};       // neighborhood -> {lat,lng}  (from stats)
+const MARKERS = new Map();     // id -> Leaflet marker currently on the map
+let selectedId = null;
 
-function sevClass(score){ if(score>=8) return "high"; if(score>=4) return "mid"; return "low"; }
-function sevColor(i){ // i in 0..1
-  if(i>=0.66) return "#ef4444"; if(i>=0.33) return "#f59e0b"; return "#22c55e";
+// ---------- helpers ----------
+function esc(s){
+  return String(s ?? '').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function fmtDate(dt){ return `${MONTHS[dt.getMonth()]} ${dt.getDate()}`; }
+function fmtTime(dt){
+  let h = dt.getHours(); const ap = h>=12?'PM':'AM'; h = h%12||12;
+  return `${h}:${String(dt.getMinutes()).padStart(2,'0')} ${ap}`;
+}
+function parseIncidentTime(d){            // "2026_10_24" + "18_22_00" -> local Date
+  const m = String(d.date||'').match(/(\d{4})\D(\d{1,2})\D(\d{1,2})/);
+  if(!m) return null;
+  const t = String(d.time||'').match(/(\d{1,2})\D(\d{1,2})(?:\D(\d{1,2}))?/);
+  return new Date(+m[1], +m[2]-1, +m[3], t?+t[1]:0, t?+t[2]:0, t&&t[3]?+t[3]:0);
+}
+function parseReceived(d){                // "2026-10-24 12:14:56" -> Date
+  const m = String(d.received_at||'').match(/(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
+  return m ? new Date(+m[1], +m[2]-1, +m[3], +m[4], +m[5]) : null;
+}
+function level(sev){ if(sev>=8) return 'high'; if(sev>=6) return 'mid'; return 'low'; }
+const LEVEL_TEXT = {high:'High concern', mid:'Moderate', low:'Low concern'};
+
+// ---------- filters ----------
+// Current    = incident time within the last 24 hours.
+// Historical = older than 24 hours, optionally limited by the date range.
+// "Include historical" adds the historical group while viewing Current.
+const DAY = 24*60*60*1000;
+const filters = { period:'current', days:'all', time:'any', type:'all', inclHist:false };
+
+function isCurrent(d){ const at = parseIncidentTime(d); return !!at && at.getTime() >= Date.now()-DAY; }
+function inTimeWindow(d, w){
+  if(w==='any') return true;
+  const at = parseIncidentTime(d); if(!at) return false;
+  const h = at.getHours();
+  if(w==='morning')   return h>=6  && h<12;
+  if(w==='afternoon') return h>=12 && h<17;
+  if(w==='evening')   return h>=17 && h<21;
+  if(w==='night')     return h>=21 || h<6;
+  return true;
+}
+function passesCommon(d){
+  if(!parseIncidentTime(d)) return false;
+  if(!inTimeWindow(d, filters.time)) return false;
+  if(filters.type!=='all' && d.crime!==filters.type) return false;
+  return true;
+}
+function passesHistRange(d){
+  if(filters.days==='all') return true;
+  return parseIncidentTime(d).getTime() >= Date.now() - Number(filters.days)*DAY;
+}
+function filteredGroups(){
+  const all = [...INCIDENTS.values()].filter(passesCommon);
+  const byNewest = (a,b)=> parseIncidentTime(b) - parseIncidentTime(a);
+  const current = all.filter(isCurrent).sort(byNewest);
+  const historical = all.filter(d=>!isCurrent(d) && passesHistRange(d)).sort(byNewest);
+  if(filters.period==='historical') return {current:[], historical, showCur:false, showHist:true};
+  return {current, historical: filters.inclHist ? historical : [], showCur:true, showHist:filters.inclHist};
 }
 
-function initMap(){
-  map = L.map('map',{zoomControl:true,attributionControl:false}).setView([42.32,-71.08],12);
-  // Free, keyless OpenStreetMap tiles. A CSS filter gives them a dark look to
-  // match the UI (no API key, no account, no watermark).
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
-    maxZoom:19,
-    subdomains:'abc'
-  }).addTo(map);
-}
-
-function renderMap(hoods){
-  hoods.forEach(h=>{
-    const radius = 10 + h.count*3;
-    const color = sevColor(h.intensity);
-    if(NEIGH[h.name]){
-      NEIGH[h.name].setStyle({color,fillColor:color}).setRadius(radius);
-      NEIGH[h.name].setPopupContent(popupHtml(h));
-    }else{
-      const m = L.circleMarker([h.lat,h.lng],{
-        radius, color, fillColor:color, fillOpacity:.45, weight:2
-      }).addTo(map).bindPopup(popupHtml(h));
-      NEIGH[h.name]=m;
-    }
+function refreshTypeOptions(){
+  const sel = document.getElementById('fType');
+  const have = new Set([...sel.options].map(o=>o.value));
+  [...new Set([...INCIDENTS.values()].map(d=>d.crime).filter(Boolean))].sort().forEach(t=>{
+    if(!have.has(t)){ const o=document.createElement('option'); o.value=t; o.textContent=t; sel.appendChild(o); }
   });
 }
-function popupHtml(h){
-  return `<b>${h.name}</b><br>${h.count} incident(s)<br>severity score: ${h.score}`;
+
+function initFilters(){
+  const seg = document.querySelectorAll('.seg button');
+  const fDate = document.getElementById('fDate');
+  const fIncl = document.getElementById('fInclHist');
+  const syncDisabled = ()=>{ fDate.disabled = !(filters.period==='historical' || filters.inclHist); };
+  const setPeriod = p=>{
+    filters.period = p;
+    seg.forEach(b=>b.setAttribute('aria-pressed', String(b.dataset.period===p)));
+    fIncl.disabled = (p==='historical');
+    syncDisabled(); renderView();
+  };
+  seg.forEach(b=>b.addEventListener('click', ()=>setPeriod(b.dataset.period)));
+  fDate.addEventListener('change', e=>{ filters.days=e.target.value; renderView(); });
+  document.getElementById('fTime').addEventListener('change', e=>{ filters.time=e.target.value; renderView(); });
+  document.getElementById('fType').addEventListener('change', e=>{ filters.type=e.target.value; renderView(); });
+  fIncl.addEventListener('change', e=>{ filters.inclHist=e.target.checked; syncDisabled(); renderView(); });
+  document.getElementById('fReset').addEventListener('click', ()=>{
+    fDate.value='all'; document.getElementById('fTime').value='any'; document.getElementById('fType').value='all';
+    fIncl.checked=false;
+    Object.assign(filters,{days:'all',time:'any',type:'all',inclHist:false});
+    setPeriod('current');
+  });
 }
 
+// ---------- map ----------
+function initMap(){
+  map = L.map('map',{zoomControl:false,attributionControl:true}).setView([42.315,-71.08],12);
+  map.attributionControl.setPrefix('Approximate locations · Not for navigation');
+  // Esri World Street Map — no API key needed. Muted in CSS (.leaflet-tile-pane)
+  // for a light, low-contrast look. Attribution is required, so it stays on.
+  L.tileLayer('https://services.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',{
+    maxZoom:19, maxNativeZoom:18,
+    attribution:'Tiles &copy; <a href="https://www.esri.com/">Esri</a> &mdash; Esri, HERE, Garmin, &copy; OpenStreetMap contributors'
+  }).addTo(map);
+  L.control.zoom({position:'bottomright'}).addTo(map);
+  L.control.scale({position:'bottomleft', imperial:false, maxWidth:110}).addTo(map);
+  dotLayer = L.layerGroup().addTo(map);
+  map.on('click', ()=>{ if(selectedId){ selectedId=null; renderView(); } });
+}
+
+// The public feed deliberately omits precise coordinates, so each marker sits near
+// its neighborhood center with a small, stable offset derived from the incident id.
+function hashUnit(str, salt){
+  let h = 2166136261 ^ salt;
+  for(let i=0;i<str.length;i++){ h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return ((h>>>0) % 100000) / 100000;
+}
+function dotPosition(d){
+  const c = HOOD_CENTERS[d.neighborhood];
+  if(!c) return null;
+  const ang = hashUnit(d.id, 1) * Math.PI * 2;
+  const r = Math.sqrt(hashUnit(d.id, 2)) * 0.006;   // up to ~600 m spread
+  return [c.lat + r*Math.sin(ang), c.lng + r*Math.cos(ang)/0.74];
+}
+
+// Small line glyphs drawn inside each marker, one per incident type.
+const GLYPHS = {
+  Shooting:      '<circle cx="12" cy="12" r="7"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5"/>',
+  Robbery:       '<path d="M6 8h12l-1 12H7z"/><path d="M9 8a3 3 0 0 1 6 0"/>',
+  Assault:       '<path d="M13 2L5 14h6l-1 8 8-12h-6z"/>',
+  Fighting:      '<path d="M13 2L5 14h6l-1 8 8-12h-6z"/>',
+  Burglary:      '<path d="M4 11l8-7 8 7v9H4z"/><path d="M10 20v-5h4v5"/>',
+  RoadAccidents: '<path d="M5 16V11l2-5h10l2 5v5z"/><path d="M5 11h14"/><circle cx="8" cy="16" r="1.6"/><circle cx="16" cy="16" r="1.6"/>',
+  Arson:         '<path d="M12 3c1 4 6 6 6 11a6 6 0 0 1-12 0c0-3 2-4 2-7 2 1 3 2 4 4 1-2 0-5 0-8z"/>',
+  Explosion:     '<path d="M12 3c1 4 6 6 6 11a6 6 0 0 1-12 0c0-3 2-4 2-7 2 1 3 2 4 4 1-2 0-5 0-8z"/>',
+  Abuse:         '<path d="M12 3l8 3v6c0 5-4 8-8 9-4-1-8-4-8-9V6z"/><path d="M12 8v5M12 16h.01"/>',
+  _default:      '<path d="M12 4v10M12 18h.01"/>',
+  _hist:         '<path d="M5 12l5 5 9-10"/>'
+};
+function markerIcon(d, hist, sel){
+  const lv = hist ? 'hist' : level(d.severity);
+  const g = hist ? GLYPHS._hist : (GLYPHS[d.crime] || GLYPHS._default);
+  return L.divIcon({
+    className:`inc-marker ${lv}${sel?' sel':''}`,
+    html:`<div class="pin ${lv}"><svg viewBox="0 0 24 24" aria-hidden="true">${g}</svg></div>`,
+    iconSize:[30,30], iconAnchor:[15,15]
+  });
+}
+function renderDots(groups){
+  if(!map) return;
+  dotLayer.clearLayers(); MARKERS.clear();
+  const add = (d, hist)=>{
+    const pos = dotPosition(d); if(!pos) return;
+    const sel = d.id===selectedId;
+    const m = L.marker(pos, {
+      icon: markerIcon(d, hist, sel), keyboard:true,
+      title: `${d.crime}, ${d.neighborhood}`, alt: `${d.crime}, ${d.neighborhood}`,
+      zIndexOffset: sel ? 1000 : (hist ? 0 : 100)
+    });
+    m.on('click', e=>{ L.DomEvent.stopPropagation(e); select(d.id, 'map'); });
+    if(sel) m.bindTooltip(esc(d.crime), {permanent:true, direction:'right', offset:[20,0], className:'pin-label'});
+    m.addTo(dotLayer); MARKERS.set(d.id, m);
+  };
+  groups.historical.forEach(d=>add(d,true));
+  groups.current.forEach(d=>add(d,false));    // current on top
+  // First time we have markers, zoom to fit them (closer, street-level feel).
+  if(!didFit && MARKERS.size){
+    didFit = true;
+    map.fitBounds(L.latLngBounds([...MARKERS.values()].map(m=>m.getLatLng())).pad(0.15), {maxZoom:15});
+  }
+}
+let didFit = false;
+
+// Center a point in the part of the map not covered by the detail panel.
+function focusOn(latlng, zoom){
+  const z = zoom ?? map.getZoom();
+  const shift = window.innerWidth > 900 ? 180 : 0;
+  const p = map.project(latlng, z).add([shift, 0]);
+  map.flyTo(map.unproject(p, z), z, {duration:.6});
+}
+
+// ---------- detail panel ----------
+function fmtLongDate(dt){ return `${MONTHS[dt.getMonth()]} ${dt.getDate()}, ${dt.getFullYear()}`; }
+function fmtTimeSec(dt){
+  let h = dt.getHours(); const ap = h>=12?'PM':'AM'; h = h%12||12;
+  return `${h}:${String(dt.getMinutes()).padStart(2,'0')}:${String(dt.getSeconds()).padStart(2,'0')} ${ap} ET`;
+}
+function renderDetail(){
+  const panel = document.getElementById('detail');
+  const d = selectedId && INCIDENTS.get(selectedId);
+  if(!d){ panel.classList.remove('open'); panel.innerHTML=''; return; }
+  const hist = !isCurrent(d), lv = level(d.severity);
+  const at = parseIncidentTime(d), rc = parseReceived(d);
+  panel.innerHTML = `
+    <div class="dh"><span class="ref">Verified · ${esc(String(d.id).toUpperCase())}</span>
+      <button type="button" class="close" id="dClose" aria-label="Close incident details">
+        <svg class="icon"><use href="#i-x"/></svg></button></div>
+    <h4 id="dTitle">${esc(d.crime)}</h4>
+    <div class="where">${esc(d.neighborhood)}, Boston · approximate</div>
+    <div class="chips">
+      <span class="chip ${hist?'hist':'cur'}"><span class="d"></span>${hist?'Historical':'Current'}</span>
+      <span class="chip ${lv}"><span class="d"></span>${LEVEL_TEXT[lv]}</span>
+    </div>
+    <p class="desc">${esc(d.crime)} detected by the Revere camera network and verified by officials.
+      Shown at an approximate spot within ${esc(d.neighborhood)} to protect privacy.</p>
+    <div class="facts">
+      <div><div class="k">Reported date</div><div class="v">${at?esc(fmtLongDate(at)):'—'}</div></div>
+      <div><div class="k">Reported time</div><div class="v">${at?esc(fmtTimeSec(at)):'—'}</div></div>
+      <div><div class="k">Received</div><div class="v">${rc?esc(fmtDate(rc)+' · '+fmtTime(rc)):'—'}</div></div>
+      <div><div class="k">Severity</div><div class="v mono">${esc(d.severity)} / 10</div></div>
+    </div>
+    <div class="upd">${esc(document.getElementById('stamp').textContent)}</div>
+    <div class="assess"><b>Verified by officials</b>Not an emergency classification. Not an official response status.</div>
+    <button type="button" class="zoom-to" id="dZoom"><svg class="icon"><use href="#i-target"/></svg>Zoom to incident</button>`;
+  panel.classList.add('open');
+  document.getElementById('dClose').addEventListener('click', ()=>{ selectedId=null; renderView(); });
+  document.getElementById('dZoom').addEventListener('click', ()=>{
+    const m = MARKERS.get(d.id); if(m) focusOn(m.getLatLng(), 16);
+  });
+}
+
+// ---------- list ----------
+function itemHtml(d, hist){
+  const at = parseIncidentTime(d), rc = parseReceived(d);
+  const lv = level(d.severity);
+  return `<button type="button" class="item" data-id="${esc(d.id)}" aria-current="${d.id===selectedId}">
+    <div class="row1"><span class="dot ${hist?'hist':lv}" aria-hidden="true"></span>${esc(d.crime)}
+      <svg class="icon chev" aria-hidden="true"><use href="#i-chev"/></svg></div>
+    <div class="loc">${esc(d.neighborhood)}</div>
+    <div class="row3"><span>${at ? esc(fmtDate(at)+' · '+fmtTime(at)) : '—'}</span>
+      <span class="lvl ${hist?'hist':lv}">${hist?'Historical':LEVEL_TEXT[lv]}</span></div>
+    <div class="recv">Received ${rc ? esc(fmtDate(rc)+' · '+fmtTime(rc)) : '—'}</div>
+  </button>`;
+}
+function renderList(g){
+  const total = g.current.length + g.historical.length;
+  document.getElementById('listHead').textContent = `${total} incident${total===1?'':'s'} in view`;
+  const body = document.getElementById('listBody');
+  if(!INCIDENTS.size){ body.innerHTML = '<div class="empty">No verified incidents yet.</div>'; return; }
+  let html = '';
+  if(g.showCur){
+    html += `<div class="group">Current · ${g.current.length} incident${g.current.length===1?'':'s'}</div>`;
+    html += g.current.length ? g.current.map(d=>itemHtml(d,false)).join('') : '<div class="empty">No incidents in the last 24 hours match these filters.</div>';
+  }
+  if(g.showHist){
+    html += `<div class="group">Historical · ${g.historical.length} incident${g.historical.length===1?'':'s'}</div>`;
+    html += g.historical.length ? g.historical.map(d=>itemHtml(d,true)).join('') : '<div class="empty">No historical incidents match these filters.</div>';
+  }
+  body.innerHTML = html;
+}
+
+// ---------- explore over time ----------
+function fmtTick(dt){ return `${fmtDate(dt)} · ${String(dt.getHours()).padStart(2,'0')}:${String(dt.getMinutes()).padStart(2,'0')}`; }
+function renderTimeline(){
+  const now = Date.now();
+  const pool = [...INCIDENTS.values()].filter(passesCommon);
+  const times = pool.map(d=>parseIncidentTime(d).getTime());
+  const end = Math.max(now, ...times);
+  let start, aStart, aEnd;
+  if(filters.period==='current' && !filters.inclHist){
+    start = now - 2*DAY; aStart = now - DAY; aEnd = end;
+  }else{
+    start = filters.days==='all' ? Math.min(now - 2*DAY, ...times) : now - Number(filters.days)*DAY;
+    aStart = start;
+    aEnd = filters.period==='historical' ? now - DAY : end;
+  }
+  const BINS = 48, span = Math.max(end - start, 1), w = span / BINS;
+  const counts = new Array(BINS).fill(0);
+  times.forEach(t=>{ if(t>=start && t<=end) counts[Math.min(BINS-1, Math.floor((t-start)/w))]++; });
+  const max = Math.max(...counts, 1);
+  document.getElementById('tlBars').innerHTML = counts.map((c,i)=>{
+    const b0 = start + i*w, b1 = b0 + w;
+    const on = b1 > aStart && b0 < aEnd;
+    return `<i class="${c ? (on?'on':'') : 'zero'}" style="height:${c ? Math.max(8, Math.round(c/max*100)) : 4}%" title="${c} incident${c===1?'':'s'}"></i>`;
+  }).join('');
+  const pct = t => Math.max(0, Math.min(100, (t-start)/span*100));
+  const fill = document.getElementById('tlFill');
+  fill.style.left = pct(aStart)+'%'; fill.style.width = (pct(aEnd)-pct(aStart))+'%';
+  document.getElementById('tlKnob').style.left = pct(aEnd)+'%';
+  const s = new Date(start), m = new Date(start + span/2), e = new Date(end);
+  document.getElementById('tlTicks').innerHTML = `<span>${fmtTick(s)}</span><span>${fmtTick(m)}</span><span>${fmtTick(e)}</span>`;
+  const sameYear = s.getFullYear()===e.getFullYear();
+  document.getElementById('tlRange').textContent =
+    `${fmtDate(s)}${sameYear?'':', '+s.getFullYear()} – ${fmtDate(e)}, ${e.getFullYear()} · ET`;
+}
+
+function renderView(){
+  refreshTypeOptions();
+  const g = filteredGroups();
+  const visible = new Set([...g.current, ...g.historical].map(d=>d.id));
+  if(selectedId && !visible.has(selectedId)) selectedId = null;
+  renderList(g);
+  renderDots(g);
+  renderDetail();
+  renderTimeline();
+}
+
+function select(id, source){
+  selectedId = id;
+  renderView();
+  const m = MARKERS.get(id);
+  if(m) focusOn(m.getLatLng(), source==='list' ? Math.max(map.getZoom(), 14) : undefined);
+  if(source==='map'){
+    const el = document.querySelector(`.item[data-id="${CSS.escape(id)}"]`);
+    if(el) el.scrollIntoView({block:'nearest', behavior:'smooth'});
+  }
+}
+document.getElementById('listBody').addEventListener('click', e=>{
+  const b = e.target.closest('.item'); if(b) select(b.dataset.id, 'list');
+});
+document.addEventListener('keydown', e=>{
+  if(e.key==='Escape' && selectedId){ selectedId=null; renderView(); }
+});
+
+// ---------- search (addresses via OpenStreetMap Nominatim, or "lat, lng") ----------
+let searchPin = null;
+function searchMsg(text){
+  const el = document.getElementById('searchMsg');
+  el.textContent = text || ''; el.style.display = text ? 'block' : 'none';
+}
+function dropSearchPin(lat, lng, label){
+  if(searchPin) searchPin.remove();
+  searchPin = L.marker([lat,lng], {
+    icon: L.divIcon({className:'', html:'<div class="search-pin"></div>', iconSize:[14,14], iconAnchor:[7,7]}),
+    keyboard:false, interactive:false
+  }).addTo(map);
+  if(label) searchPin.bindTooltip(esc(label), {permanent:true, direction:'right', offset:[10,0], className:'pin-label'});
+  map.flyTo([lat,lng], 16, {duration:.6});
+}
+document.getElementById('searchForm').addEventListener('submit', async ()=>{
+  const q = document.getElementById('searchInput').value.trim();
+  if(!q){ searchMsg(''); if(searchPin){ searchPin.remove(); searchPin=null; } return; }
+  const c = q.match(/^\s*(-?\d{1,3}(?:\.\d+)?)\s*[, ]\s*(-?\d{1,3}(?:\.\d+)?)\s*$/);
+  if(c){
+    const lat = +c[1], lng = +c[2];
+    if(Math.abs(lat)<=90 && Math.abs(lng)<=180){ searchMsg(''); dropSearchPin(lat, lng, `${lat.toFixed(5)}, ${lng.toFixed(5)}`); }
+    else searchMsg('Those coordinates are out of range.');
+    return;
+  }
+  searchMsg('Searching…');
+  try{
+    const url = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=us'
+      + '&viewbox=-71.20,42.40,-70.98,42.22&q=' + encodeURIComponent(q);
+    const res = await fetch(url, {headers:{'Accept':'application/json'}});
+    const data = res.ok ? await res.json() : [];
+    if(!data.length){ searchMsg('No match found. Try a street address or "lat, lng".'); return; }
+    searchMsg('');
+    dropSearchPin(+data[0].lat, +data[0].lon, String(data[0].display_name||q).split(',').slice(0,2).join(','));
+  }catch(err){
+    searchMsg('Search is unavailable right now.');
+  }
+});
+
+// ---------- overview (stats / ranks / chart / feed) ----------
 function renderRanks(hoods){
   const el = document.getElementById('ranklist');
-  if(!hoods.length){ el.innerHTML='<div style="color:var(--muted);padding:20px;">No data yet.</div>'; return; }
+  if(!hoods.length){ el.innerHTML='<div class="empty">No data yet.</div>'; return; }
   const max = Math.max(...hoods.map(h=>h.score),1);
   el.innerHTML = hoods.map(h=>{
     const pct = Math.round((h.score/max)*100);
-    const col = sevColor(h.intensity);
-    const sc = sevClass(h.score);
+    const sc = h.score>=8 ? 'high' : h.score>=4 ? 'mid' : 'low';
     return `<div class="rank">
-      <div class="hood">${h.name}</div>
-      <div class="bar"><i style="width:${pct}%;background:${col};"></i></div>
+      <div class="hood">${esc(h.name)}</div>
+      <div class="bar"><i style="width:${pct}%;"></i></div>
       <div class="cnt">${h.count} · <span class="sev ${sc}">${h.score}</span></div>
     </div>`;
   }).join('');
 }
-
 function renderChart(byCrime){
-  const labels = Object.keys(byCrime);
-  const data = Object.values(byCrime);
-  const ctx = document.getElementById('crimeChart');
+  const labels = Object.keys(byCrime), data = Object.values(byCrime);
   if(crimeChart){ crimeChart.data.labels=labels; crimeChart.data.datasets[0].data=data; crimeChart.update(); return; }
-  crimeChart = new Chart(ctx,{
+  crimeChart = new Chart(document.getElementById('crimeChart'),{
     type:'bar',
-    data:{labels,datasets:[{data,backgroundColor:'#60a5fa',borderRadius:6}]},
+    data:{labels,datasets:[{data,backgroundColor:'#153D59',borderRadius:0}]},
     options:{plugins:{legend:{display:false}},
-      scales:{x:{ticks:{color:'#8aa0b8'},grid:{display:false}},
-              y:{ticks:{color:'#8aa0b8'},grid:{color:'#1b2636'}}}}
+      scales:{x:{ticks:{color:'#5f6b7a'},grid:{display:false}},
+              y:{ticks:{color:'#5f6b7a',precision:0},grid:{color:'#eceff2'}}}}
   });
 }
-
 function renderStats(s){
   document.getElementById('s-total').textContent = s.total;
   document.getElementById('s-verified').textContent = s.verified;
   document.getElementById('s-hoods').textContent = s.neighborhoods.filter(h=>h.count>0).length;
-  document.getElementById('s-top').textContent = s.neighborhoods.length ? (s.neighborhoods[0].count? s.neighborhoods[0].name : '—') : '—';
-  renderMap(s.neighborhoods);
+  document.getElementById('s-top').textContent = (s.neighborhoods[0] && s.neighborhoods[0].count) ? s.neighborhoods[0].name : '—';
+  s.neighborhoods.forEach(h=>{ HOOD_CENTERS[h.name] = {lat:h.lat, lng:h.lng}; });
   renderRanks(s.neighborhoods.filter(h=>h.count>0));
   renderChart(s.by_crime);
+  const now = new Date();
+  document.getElementById('stamp').textContent = `Updated ${fmtDate(now)}, ${now.getFullYear()} · ${fmtTime(now)}`;
+  renderView();   // neighborhood centers may have just arrived
 }
-
-function addIncident(d, prepend=true){
+function renderFeed(){
   const feed = document.getElementById('feed');
-  if(feed.firstChild && feed.firstChild.nodeType===1 && feed.children.length===1 && feed.children[0].style.color){ feed.innerHTML=''; }
-  const row = document.createElement('div');
-  row.className='inc';
-  row.innerHTML = `<span class="tag">${d.crime}</span>
-    <div class="meta"><b>${d.neighborhood}</b> · severity ${d.severity}<br>${d.date} ${d.time}</div>`;
-  if(prepend) feed.insertBefore(row, feed.firstChild); else feed.appendChild(row);
+  const items = [...INCIDENTS.values()].sort((a,b)=> String(b.received_at||'').localeCompare(String(a.received_at||''))).slice(0,30);
+  if(!items.length){ feed.innerHTML = '<div class="empty">No verified incidents yet.</div>'; return; }
+  feed.innerHTML = items.map(d=>{
+    const at = parseIncidentTime(d);
+    return `<div class="inc"><span class="tag">${esc(d.crime)}</span>
+      <div class="meta"><b>${esc(d.neighborhood)}</b> · severity ${esc(d.severity)}<br>${at ? esc(fmtDate(at)+' · '+fmtTime(at)) : ''}</div></div>`;
+  }).join('');
 }
 
+// ---------- live data ----------
+function upsert(d){
+  if(!d || !d.id) return;
+  if(d.status && d.status!=='verified') INCIDENTS.delete(d.id);   // un-verified / dismissed
+  else INCIDENTS.set(d.id, d);
+}
+function setLive(on, text){
+  document.getElementById('liveStatus').classList.toggle('live', on);
+  document.getElementById('liveText').textContent = text;
+}
 function connect(){
   const proto = location.protocol==='https:'?'wss':'ws';
   const ws = new WebSocket(`${proto}://${location.host}/ws/dashboard?channel=public`);
-  ws.onopen = ()=> document.getElementById('liveText').textContent='Live · connected';
-  ws.onclose= ()=>{ document.getElementById('liveText').textContent='reconnecting…'; setTimeout(connect,2000); };
+  ws.onopen = ()=> setLive(true, 'Live · verified incidents only');
+  ws.onclose= ()=>{ setLive(false, 'Reconnecting…'); setTimeout(connect,2000); };
   ws.onmessage=(e)=>{
     const m = JSON.parse(e.data);
     if(m.type==='stats') renderStats(m.data);
-    else if(m.type==='history') m.data.forEach(d=>addIncident(d,false));
-    else if(m.type==='detection') addIncident(m.data,true);
+    else if(m.type==='history'){ INCIDENTS.clear(); m.data.forEach(upsert); renderView(); renderFeed(); }
+    else if(m.type==='detection'){ upsert(m.data); renderView(); renderFeed(); }
   };
 }
 
 initMap();
+initFilters();
 connect();
 </script>
 </body>
