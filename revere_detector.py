@@ -72,7 +72,7 @@ def _find_model():
 
 MODEL_PATH = _find_model()
 CLIP_DIR = os.environ.get("REVERE_CLIP_DIR", os.path.join(BASE_DIR, "clips"))
-CLIP_PATH = os.path.join(CLIP_DIR, "output_clip.avi")
+CLIP_PATH = os.path.join(CLIP_DIR, "output_clip.webm")
 WS_BACKEND = os.environ.get("REVERE_WS_BACKEND", "ws://127.0.0.1:8000/ws/ingest")
 
 CLASSES_LIST = ["Fighting", "Shooting", "RoadAccidents", "Robbery", "Abuse",
@@ -107,7 +107,8 @@ def save_clip(frames):
     if not frames:
         return False
     height, width, _ = frames[0].shape
-    fourcc = cv2.VideoWriter_fourcc(*"XVID")
+    # VP80 (VP8) in a .webm container — this is what browsers can play in <video>.
+    fourcc = cv2.VideoWriter_fourcc(*"VP80")
     writer = cv2.VideoWriter(CLIP_PATH, fourcc, 15, (width, height))
     for frame in frames:
         writer.write(frame)
@@ -209,7 +210,7 @@ class Detector:
             date, time_str = get_date_and_time()
             archive_path = CLIP_PATH
             try:
-                archive_path = os.path.join(CLIP_DIR, f"{city}_{date}+{time_str}.avi")
+                archive_path = os.path.join(CLIP_DIR, f"{city}_{date}+{time_str}.webm")
                 os.replace(CLIP_PATH, archive_path)
             except Exception:  # noqa: BLE001
                 archive_path = CLIP_PATH
