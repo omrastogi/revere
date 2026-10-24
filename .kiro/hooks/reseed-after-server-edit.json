@@ -1,0 +1,15 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Reseed demo data after server edits",
+      "trigger": "PostFileSave",
+      "description": "Reminds Kiro that saving server.py wipes the in-memory demo data, so it reseeds and re-verifies incidents and re-checks the public privacy rules.",
+      "matcher": "server\\.py$",
+      "action": {
+        "type": "agent",
+        "prompt": "server.py was just saved. uvicorn --reload restarts the app and wipes the in-memory DETECTIONS list. Before presenting results: run `.venv/bin/python seed_demo.py 20`, log in as officer/boston123, verify about 6 detections via POST /api/detections/{id}/status (status=verified), and confirm /api/detections returns verified incidents. Also re-check that public_view() still excludes coordinates, location, locality and video_url."
+      }
+    }
+  ]
+}
