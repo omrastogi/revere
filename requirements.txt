@@ -4,7 +4,7 @@ uvicorn[standard]>=0.27
 websockets>=11.0
 python-multipart>=0.0.6
 
-# Detector only (VigilAI_WebSocket.py)
+# Detector only (revere_detector.py)
 tensorflow>=2.15
 opencv-python>=4.8
 numpy>=1.24

@@ -1,24 +1,24 @@
 """
-vigil_sender.py — drop-in helper for the VigilAI detector.
+revere_sender.py — drop-in helper for the REVERE detector.
 
 Import this in your detection script and call send_detection() whenever a
 crime clip is ready. It handles base64 encoding and the websocket round-trip.
 
 It is safe to call from any thread: the websocket work runs in a fresh
 background thread with its own asyncio event loop, so it won't clash with
-VigilAI's own threads or Tkinter's main loop.
+the detector's own threads or Tkinter's main loop.
 
-Example (inside VigilAI, replacing add_to_database):
+Example:
 
-    from vigil_sender import send_detection
+    from revere_sender import send_detection
 
     send_detection(
         crime="Fighting",
-        location="Lucknow",
-        coordinates="26.85,80.95",
+        location="Boston",
+        coordinates="42.32,-71.09",
         date="2026_10_24",
         time="19_34_41",
-        video_path="C:/.../Eyebase/output_clip.avi",
+        video_path="./clips/output_clip.avi",
         server="ws://127.0.0.1:8000/ws/ingest",
     )
 """
@@ -54,18 +54,19 @@ def _run_in_new_loop(payload, server, result):
 
 
 def send_detection(crime, location, coordinates, date, time,
-                   video_path=None, server="ws://127.0.0.1:8000/ws/ingest",
+                   locality=None, video_path=None,
+                   server="ws://127.0.0.1:8000/ws/ingest",
                    blocking=True, timeout=30):
     """Send one detection (metadata + optional clip) to the backend.
 
-    Runs on a background thread so it is safe to call from VigilAI's worker
-    thread. If blocking=True, waits up to `timeout` seconds for the reply.
+    Runs on a background thread so it is safe to call from a worker thread.
+    If blocking=True, waits up to `timeout` seconds for the reply.
 
     Returns the server's JSON reply string, or None on failure.
     """
     if websockets is None:
-        print("[vigil_sender] 'websockets' package not installed; "
-              "run: py -m pip install websockets")
+        print("[revere_sender] 'websockets' package not installed; "
+              "run: pip install websockets")
         return None
 
     payload = {
@@ -75,16 +76,19 @@ def send_detection(crime, location, coordinates, date, time,
         "date": date,
         "time": time,
     }
+    if locality is not None:
+        payload["locality"] = locality
+
     if video_path and os.path.exists(video_path):
         try:
             with open(video_path, "rb") as f:
                 payload["video_b64"] = base64.b64encode(f.read()).decode("ascii")
             payload["filename"] = os.path.basename(video_path)
         except Exception as e:  # noqa: BLE001
-            print(f"[vigil_sender] could not read video: {e}")
+            print(f"[revere_sender] could not read video: {e}")
     else:
         if video_path:
-            print(f"[vigil_sender] video not found: {video_path} (sending metadata only)")
+            print(f"[revere_sender] video not found: {video_path} (sending metadata only)")
 
     result = {}
     t = threading.Thread(target=_run_in_new_loop, args=(payload, server, result))
@@ -93,9 +97,9 @@ def send_detection(crime, location, coordinates, date, time,
     if blocking:
         t.join(timeout)
         if result.get("error"):
-            print(f"[vigil_sender] send failed: {result['error']}")
+            print(f"[revere_sender] send failed: {result['error']}")
             return None
         reply = result.get("reply")
-        print(f"[vigil_sender] sent '{crime}' @ {location} -> {reply}")
+        print(f"[revere_sender] sent '{crime}' @ {location} -> {reply}")
         return reply
     return None

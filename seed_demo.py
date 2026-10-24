@@ -3,14 +3,25 @@ seed_demo.py — populate the dashboard with sample Boston detections.
 
 Handy for demoing the UI without running the real detector.
 
-    py seed_demo.py           # 14 detections
-    py seed_demo.py 30        # custom count
+    python seed_demo.py                 # 14 detections
+    python seed_demo.py 30              # custom count
+    python seed_demo.py 20 clip.webm   # attach a real clip to some detections
+
+If a clip path is given (and exists), it's attached to roughly half the
+detections. Otherwise detections are metadata-only.
 """
 import asyncio, base64, json, os, random, sys
 import websockets
 
-WS = "ws://127.0.0.1:8000/ws/ingest"
-CLIP = "C:/demo/Ryuks-main/Ryuks-main/VigilAI/healthcare/healthcare/Eyebase/Lucknow_2023_06_18+18_33_21_233790.webm"
+WS = os.environ.get("REVERE_WS_BACKEND", "ws://127.0.0.1:8000/ws/ingest")
+
+# Optional sample clip: 2nd CLI arg, or REVERE_SAMPLE_CLIP env var, else none.
+CLIP = None
+for cand in (sys.argv[2] if len(sys.argv) > 2 else None,
+             os.environ.get("REVERE_SAMPLE_CLIP")):
+    if cand and os.path.exists(cand):
+        CLIP = cand
+        break
 
 HOODS = ["Roxbury", "Dorchester", "Mattapan", "Jamaica Plain", "South Boston",
          "Back Bay", "East Boston", "Roslindale", "Hyde Park", "Charlestown", "Allston"]
@@ -18,9 +29,10 @@ CRIMES = ["Shooting", "Robbery", "Assault", "Fighting", "Burglary",
           "RoadAccidents", "Arson", "Abuse"]
 
 clip_b64 = None
-if os.path.exists(CLIP):
+if CLIP:
     with open(CLIP, "rb") as f:
         clip_b64 = base64.b64encode(f.read()).decode("ascii")
+    print(f"Attaching sample clip: {CLIP}")
 
 
 async def main(n):
@@ -36,7 +48,7 @@ async def main(n):
             }
             if clip_b64 and i % 2 == 0:
                 p["video_b64"] = clip_b64
-                p["filename"] = "clip.webm"
+                p["filename"] = os.path.basename(CLIP)
             await ws.send(json.dumps(p))
             print(f"sent {i+1}/{n}: {p['crime']} @ {p['locality']} ->", await ws.recv())
 

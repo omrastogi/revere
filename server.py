@@ -12,7 +12,7 @@ A FastAPI server powering a two-audience crime-intelligence platform:
       full metadata, and can verify / dismiss incidents.
 
 Realtime:
-  • Detectors (VigilAI) push detections over  ws://.../ws/ingest
+  • Detectors (REVERE) push detections over  ws://.../ws/ingest
   • Dashboards receive live updates over       ws://.../ws/dashboard
       (channel is chosen per-connection: "public" or "officials")
 

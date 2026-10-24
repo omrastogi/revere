@@ -1,11 +1,11 @@
 """
-Test client — simulates VigilAI sending a detection to the backend.
+Test client — simulates the REVERE detector sending a detection to the backend.
 
 Usage:
-    py send_test.py                 # sends a metadata-only detection
-    py send_test.py path/to/clip.avi  # sends a real video clip too
+    python send_test.py                   # sends a metadata-only detection
+    python send_test.py path/to/clip.avi  # sends a real video clip too
 
-This is the exact pattern the real VigilAI detector should follow:
+This is the exact pattern the real REVERE detector follows:
 open a websocket to /ws/ingest and send one JSON message per detection.
 """
 
@@ -28,7 +28,8 @@ async def main():
     payload = {
         "crime":       "Fighting",
         "location":    "Boston",
-        "coordinates": "26.85,80.95",
+        "locality":    "Roxbury",
+        "coordinates": "42.3251,-71.0956",
         "date":        now.strftime("%Y_%m_%d"),
         "time":        now.strftime("%H_%M_%S"),
     }

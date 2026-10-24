@@ -15,8 +15,8 @@ backend powers two experiences:
 ## Architecture
 
 ```
- Detector (VigilAI_WebSocket.py)        Backend (server.py)                Browsers
- ───────────────────────────────        ───────────────────                ────────
+ Detector (revere_detector.py)          Backend (server.py)                Browsers
+ ─────────────────────────────          ───────────────────                ────────
  runs the model, saves a clip,          store clip + map to a Boston       Community  ◄─ ws /ws/dashboard?channel=public
  sends it over  ─ws /ws/ingest─►        neighborhood, score severity,         (verified only, trimmed)
                                          broadcast per channel              Officials  ◄─ ws /ws/dashboard?channel=officials
@@ -93,27 +93,28 @@ user store with hashed passwords before any real deployment.**
 
 ## Running the real detector (optional)
 
-`VigilAI_WebSocket.py` loads a Keras model and runs live inference on a video
-file or webcam, then streams detections to the backend.
+`revere_detector.py` loads a Keras model and runs live inference on a video
+file or webcam, then streams detections to the backend. It opens a dark,
+REVERE-branded control panel with a live activity log and connection status.
 
 1. Place the model file `model_8000.h5` next to the script (or set
-   `VIGIL_MODEL_PATH`).
+   `REVERE_MODEL_PATH`).
 2. Make sure the backend is running.
 3. Launch:
    ```bash
-   python VigilAI_WebSocket.py
+   python revere_detector.py
    ```
 4. In the window that opens, choose **Analyze Video File** or **Live Camera**.
-   Press `q` to stop the feed; the detected clip is saved and streamed to the
-   backend, appearing instantly on the officials dashboard.
+   Press `q` in the video window to stop the feed; the detected clip is saved
+   and streamed to the backend, appearing instantly on the officials dashboard.
 
 Environment overrides:
 
-| Variable           | Default                         | Purpose                        |
-|--------------------|---------------------------------|--------------------------------|
-| `VIGIL_MODEL_PATH` | `./model_8000.h5`               | Path to the Keras model        |
-| `VIGIL_CLIP_DIR`   | `./clips`                       | Where clips are written        |
-| `VIGIL_WS_BACKEND` | `ws://127.0.0.1:8000/ws/ingest` | Backend ingest WebSocket URL   |
+| Variable            | Default                         | Purpose                        |
+|---------------------|---------------------------------|--------------------------------|
+| `REVERE_MODEL_PATH` | `./model_8000.h5`               | Path to the Keras model        |
+| `REVERE_CLIP_DIR`   | `./clips`                       | Where clips are written        |
+| `REVERE_WS_BACKEND` | `ws://127.0.0.1:8000/ws/ingest` | Backend ingest WebSocket URL   |
 
 ---
 
@@ -161,10 +162,10 @@ The server replies `{"ok": true, "id": "<detection id>"}`.
 | `static/community.html` | Public portal (Leaflet map + Chart.js)       |
 | `static/login.html`     | Officials login                              |
 | `static/officials.html` | Officials dashboard                          |
-| `vigil_sender.py`       | Reusable detector helper (`send_detection`)  |
+| `revere_sender.py`      | Reusable detector helper (`send_detection`)  |
 | `send_test.py`          | Single-detection test client                 |
 | `seed_demo.py`          | Bulk demo-data seeder                        |
-| `VigilAI_WebSocket.py`  | The detector (loads the real model)          |
+| `revere_detector.py`    | The detector (loads the real model + GUI)    |
 | `requirements.txt`      | Python dependencies                          |
 | `clips/`                | Saved video clips (runtime; git-ignored)     |
 
