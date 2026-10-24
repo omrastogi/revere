@@ -150,24 +150,55 @@ match_dictionary = None
 D = 1024
 
 
+F = None
+
+
 def _import_backend():
     """Import torch and the Phase-2 POC helpers once."""
-    global torch, nn, clip_starts, Encoder, Head, load_dictionary, match_dictionary, D
+    global torch, nn, F, clip_starts, Head, load_dictionary, match_dictionary, D
     if torch is not None:
         return
     import torch as _torch
     import torch.nn as _nn
+    import torch.nn.functional as _F
     from extract_emb import clip_starts as _clip_starts, D as _D
-    from align import Encoder as _Encoder, Head as _Head, \
-        load_dictionary as _ld, match_dictionary as _md
+    # We reuse the POC's alignment head + dictionary matcher, but NOT its Encoder
+    # (that one loads with dtype=, which older transformers reject). We use the
+    # version-robust VJepaEncoder below instead.
+    from align import Head as _Head, load_dictionary as _ld, match_dictionary as _md
     torch = _torch
     nn = _nn
+    F = _F
     clip_starts = _clip_starts
-    Encoder = _Encoder
     Head = _Head
     load_dictionary = _ld
     match_dictionary = _md
     D = _D
+
+
+class VJepaEncoder:
+    """Version-robust V-JEPA 2 encoder (same forward as poc/align.py's Encoder,
+    but loads the model without the `dtype=` kwarg and casts afterwards, so it
+    works across transformers 4.52+). Takes (B, T, H, W, 3) uint8 -> (B, 1024)."""
+
+    def __init__(self, dev):
+        from transformers import AutoModel, AutoVideoProcessor
+        vp = AutoVideoProcessor.from_pretrained(MODEL_NAME)
+        self.mean = torch.tensor(vp.image_mean, device=dev).view(1, 1, 3, 1, 1)
+        self.std = torch.tensor(vp.image_std, device=dev).view(1, 1, 3, 1, 1)
+        model = AutoModel.from_pretrained(MODEL_NAME)
+        self.model = model.half().to(dev).eval()
+        self.dev = dev
+
+    def __call__(self, x):  # (B, T, H, W, 3) uint8 -> (B, 1024) float32 on device
+        with torch.no_grad():
+            b = x.shape[0]
+            x = x.to(self.dev).permute(0, 1, 4, 2, 3).flatten(0, 1).float() / 255
+            x = F.interpolate(x, size=(SIZE, SIZE), mode="bicubic", align_corners=False)
+            x = x.clamp(0, 1).view(b, T, 3, SIZE, SIZE)
+            x = ((x - self.mean) / self.std).half()
+            return self.model(pixel_values_videos=x, skip_predictor=True) \
+                .last_hidden_state.float().mean(1)
 
 
 # --------------------------------------------------------------------------- #
@@ -213,7 +244,7 @@ class RevereModel:
         self.concepts, self.D, self.owner = load_dictionary(self.dev, DICT_DIR)
 
         self.on_log("Loading V-JEPA 2 (first run downloads the model)…")
-        self.encoder = Encoder(self.dev, torch.float16)
+        self.encoder = VJepaEncoder(self.dev)
         self.ready = True
         self.on_log("Model ready.")
 
@@ -275,19 +306,38 @@ class RevereModel:
 # --------------------------------------------------------------------------- #
 #  Video helpers
 # --------------------------------------------------------------------------- #
+def center_crop_43(img):
+    """Center-crop a BGR frame to 4:3 (the Phase-2 training preprocess)."""
+    h, w = img.shape[:2]
+    if w * 3 > h * 4:
+        cw = round(h * 4 / 3)
+        return img[:, (w - cw) // 2:(w - cw) // 2 + cw]
+    ch = round(w * 3 / 4)
+    return img[(h - ch) // 2:(h - ch) // 2 + ch]
+
+
 def read_frames(path):
-    """Decode at ~FPS (7.5), resized to 224x224 RGB. Returns (frames_224, stride, src_fps)."""
+    """Phase-2 flowchart preprocess (matches poc/demo2.py): sample at ~7.5 fps,
+    center-crop to 4:3, resize to 224x224 RGB. Returns (frames_224, stride, src_fps)."""
     cap = cv2.VideoCapture(path)
     src_fps = cap.get(cv2.CAP_PROP_FPS) or 30
     stride = max(1, round(src_fps / FPS))
     frames, n = [], 0
     while cap.grab():
         if n % stride == 0:
-            ok, f = cap.retrieve()
+            ok, img = cap.retrieve()
             if not ok:
                 break
-            f = cv2.resize(f, (SIZE, SIZE), interpolation=cv2.INTER_AREA)
-            frames.append(cv2.cvtColor(f, cv2.COLOR_BGR2RGB))
+            # center-crop to 4:3 exactly as the model was trained (demo2.read_frames)
+            h, w = img.shape[:2]
+            if w * 3 > h * 4:
+                cw = round(h * 4 / 3)
+                img = img[:, (w - cw) // 2:(w - cw) // 2 + cw]
+            else:
+                ch = round(w * 3 / 4)
+                img = img[(h - ch) // 2:(h - ch) // 2 + ch]
+            img = cv2.resize(img, (SIZE, SIZE), interpolation=cv2.INTER_AREA)
+            frames.append(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
         n += 1
     cap.release()
     if not frames:
@@ -525,7 +575,9 @@ class CameraAnalyzer:
                 break
             buf_bgr.append(frame)
             if n % sample_stride == 0:
-                small = cv2.resize(frame, (SIZE, SIZE), interpolation=cv2.INTER_AREA)
+                # match training preprocess: center-crop to 4:3, then resize to 224
+                crop = center_crop_43(frame)
+                small = cv2.resize(crop, (SIZE, SIZE), interpolation=cv2.INTER_AREA)
                 buf_small.append(cv2.cvtColor(small, cv2.COLOR_BGR2RGB))
             n += 1
 
