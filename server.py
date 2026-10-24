@@ -254,10 +254,16 @@ async def _store_detection(payload: Dict) -> Dict:
             print(f"[ingest] clip save failed: {e}")
 
     crime = payload.get("crime", "Unknown")
-    # Prefer the model's own severity (Phase-2 sends 1-5); else map by crime type.
+    # Prefer the model's own severity. Phase-2 reports severity on a 1-5 scale;
+    # the whole app (UI "/10", level thresholds, map heat) uses 0-10, so scale it.
+    # Fall back to the crime-type map (already 0-10) when no model severity is sent.
     try:
-        severity = int(payload["severity"]) if payload.get("severity") is not None \
-            else CRIME_SEVERITY.get(crime, 3)
+        if payload.get("severity") is not None:
+            raw = float(payload["severity"])
+            severity = round(raw * 2) if raw <= 5 else round(raw)  # 1-5 -> 2-10
+            severity = max(1, min(10, severity))
+        else:
+            severity = CRIME_SEVERITY.get(crime, 3)
     except (TypeError, ValueError):
         severity = CRIME_SEVERITY.get(crime, 3)
 

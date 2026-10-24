@@ -32,13 +32,15 @@ backend powers two experiences:
 - **Backend:** FastAPI + Uvicorn, WebSockets, in-memory store
 - **Frontend:** vanilla HTML/CSS/JS, [Leaflet](https://leafletjs.com) (keyless
   OpenStreetMap tiles), [Chart.js](https://www.chartjs.org)
-- **Detector (current):** frozen **V-JEPA 2** ViT-L video encoder + lightweight
-  MIL heads (`revere_websocket_new.py`) — see [`poc/training_phase1.md`](poc/training_phase1.md)
-- **Detector (legacy):** TensorFlow/Keras CNN (`revere_detector.py`)
+- **Detector (newest, Phase 2):** frozen **V-JEPA 2** ViT-L + zone / type /
+  explanation heads (`revere_websocket_camera.py`) — GREEN/YELLOW/RED zones, a
+  natural-language description, and severity. See [`poc/training_phase2.md`](poc/training_phase2.md).
+- **Detector (Phase 1):** V-JEPA 2 + MIL heads (`revere_websocket_new.py`) — see
+  [`poc/training_phase1.md`](poc/training_phase1.md).
+- **Detector (legacy):** TensorFlow/Keras CNN (`revere_detector.py`).
 
-> **Model roadmap:** V-JEPA 2 is the detector we ship today. A purpose-trained
-> final model is in progress and will replace it when ready — the backend/UI
-> contract stays the same, so only the detector swaps out.
+> **Model roadmap:** all detectors stream the same ingest message, so the
+> backend and UI never change — only the detector swaps.
 
 The platform also runs fine with **no detector at all** using simulated data via
 `seed_demo.py`, which is the fastest way to see the dashboards.
@@ -75,10 +77,15 @@ python -m uvicorn server:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 > On Windows, if `python` isn't found, use `py` instead of `python`.
+> `--host 0.0.0.0` makes the backend reachable from other machines on your
+> network (needed for the networked setup below). For purely local use,
+> `127.0.0.1` also works.
 
 ### 5. Open it
 - Community portal: <http://127.0.0.1:8000/>
 - Officials login:   <http://127.0.0.1:8000/login>
+
+The store is **in memory**, so it starts empty each time the backend starts.
 
 ### 6. See it with data
 
@@ -103,62 +110,99 @@ user store with hashed passwords before any real deployment.**
 
 ---
 
-## Running the detector — V-JEPA 2 (recommended)
+## Running a detector
 
-`revere_websocket_new.py` is the current detector. It uses a **frozen V-JEPA 2
-ViT-L** video encoder with two small MIL heads:
+A detector flags incidents and streams them (clip + metadata) to the backend.
+There are three, all with the same dark REVERE GUI — **Analyze Video File**,
+**Live Camera**, a live activity log, and an editable **Server connection** field:
 
-- **Head A** — anomaly detection: is this a crime, and in which segments?
-- **Head B** — crime type, from the segments Head A flagged most strongly
-  (classes: `Theft`, `Violence`, `FireExplosion`, `RoadAccidents`, `Vandalism`, `Arrest`).
+| Detector | Model | Notes |
+|----------|-------|-------|
+| `revere_websocket_camera.py` | **V-JEPA 2 + zone / type / explanation (Phase 2)** | **Newest.** GREEN/YELLOW/RED zones, a natural-language description, severity. |
+| `revere_websocket_new.py`    | V-JEPA 2 + MIL heads (Phase 1) | Anomaly + crime type. |
+| `revere_detector.py`         | TensorFlow/Keras CNN (legacy) | Needs `model_8000.h5`. Kept for reference. |
 
-On a detection it cuts a browser-playable `.webm` clip (the flagged span plus a
-few seconds of padding, at the source frame rate) and streams it with metadata
-to the backend. It opens a dark, REVERE-branded control panel with a live
-activity log, a connection indicator, and an editable **backend address** field.
-
-### Requirements
+### Requirements (V-JEPA 2 detectors)
 
 - **Python 3.11** recommended
 - **`transformers >= 4.52`** and **`torch >= 2.1`** — V-JEPA 2 (`AutoVideoProcessor`)
-  is not available in older versions. (An older environment will fail with
+  is not available in older versions. (An older environment fails with
   `cannot import name 'AutoVideoProcessor'`.)
-- The trained heads in `poc/ckpt/` (shipped in the repo).
+- The trained heads shipped in the repo (`poc/heads/` for Phase 2, `poc/ckpt/` for Phase 1).
 - The V-JEPA 2 weights `facebook/vjepa2-vitl-fpc64-256` download automatically on
-  first run via `transformers` (~GB). A GPU is much faster but CPU works.
+  first run (~GB). GPU is much faster, but CPU works.
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### Run (detector on the same machine as the backend)
-```bash
-python revere_websocket_new.py
-```
+---
 
-### Run (detector on another PC on the same Wi-Fi)
-Point it at the backend machine's IPv4 — a bare IP is fine:
-```bash
-python revere_websocket_new.py --host 192.168.1.42
-# or the full URL:
-python revere_websocket_new.py --backend ws://192.168.1.42:8000/ws/ingest
-```
-You can also paste the IP into the **Server connection** field in the GUI and
-click **Apply** / **Test**. Make sure the backend is started with
-`--host 0.0.0.0` (it is, by default here) and that the server PC's firewall
-allows inbound TCP 8000.
+### A. Run everything on ONE machine (local)
 
-In the window, choose **Analyze Video File** or **Live Camera**. Press `q` in
-the preview window to stop a live feed.
+1. Start the backend:
+   ```bash
+   python -m uvicorn server:app --host 0.0.0.0 --port 8000 --reload
+   ```
+2. In a second terminal, start a detector (defaults to `ws://127.0.0.1:8000`):
+   ```bash
+   python revere_websocket_camera.py
+   ```
+3. Choose **Analyze Video File** or **Live Camera**. Press `q` in the preview to
+   stop a live feed. Detections appear on the officials dashboard; verify them to
+   push them to the public map.
 
-Environment overrides:
+---
 
-| Variable            | Default                         | Purpose                             |
-|---------------------|---------------------------------|-------------------------------------|
-| `REVERE_WS_BACKEND` | `ws://127.0.0.1:8000/ws/ingest` | Backend ingest WebSocket URL        |
-| `REVERE_CLIP_DIR`   | `./clips`                       | Where clips are written             |
-| `REVERE_POC_DIR`    | `./poc`                         | Folder holding `ckpt/` + helpers    |
-| `REVERE_THRESHOLD`  | `0.5`                           | Head A anomaly-score threshold      |
+### B. Run the detector on a DIFFERENT PC on the same network
+
+Run the **backend on one PC (the "server")** and a **detector on another PC**,
+both on the same Wi-Fi/LAN.
+
+**On the server PC:**
+
+1. Start the backend bound to all interfaces:
+   ```bash
+   python -m uvicorn server:app --host 0.0.0.0 --port 8000
+   ```
+2. Find its LAN IPv4 (Windows):
+   ```powershell
+   ipconfig        # "IPv4 Address" under your Wi-Fi adapter, e.g. 10.20.0.54
+   ```
+3. Allow the port through the firewall **once** (admin PowerShell on the server PC):
+   ```powershell
+   New-NetFirewallRule -DisplayName "REVERE backend 8000" -Direction Inbound -Protocol TCP -LocalPort 8000 -Action Allow -Profile Any
+   ```
+
+**On the detector PC:**
+
+4. Clone + install, then point the detector at the server's IP (a bare IP is fine):
+   ```bash
+   python revere_websocket_camera.py --host 10.20.0.54
+   # or the full URL:
+   python revere_websocket_camera.py --backend ws://10.20.0.54:8000/ws/ingest
+   ```
+   You can also paste the IP into the GUI's **Server connection** field and click
+   **Apply** → **Test** (it confirms "Backend reachable").
+
+**Sanity check first:** on the detector PC, open `http://10.20.0.54:8000/` in a
+browser. If the community page loads, the network path works. If not, it's almost
+always the server PC's firewall (step 3) or a "guest" Wi-Fi that isolates clients.
+
+---
+
+### Environment overrides (all detectors)
+
+| Variable            | Default                         | Purpose                           |
+|---------------------|---------------------------------|-----------------------------------|
+| `REVERE_WS_BACKEND` | `ws://127.0.0.1:8000/ws/ingest` | Backend ingest WebSocket URL      |
+| `REVERE_CLIP_DIR`   | `./clips`                       | Where clips are written           |
+| `REVERE_POC_DIR`    | `./poc`                         | Folder holding the heads + helpers|
+| `REVERE_THRESHOLD`  | `0.5`                           | Anomaly-score threshold           |
+
+(The `--host` / `--backend` flag takes priority over `REVERE_WS_BACKEND`.)
+The legacy CNN detector uses `REVERE_MODEL_PATH` instead; place `model_8000.h5`
+next to it or set that variable.
 
 ### POC details
 
@@ -211,12 +255,18 @@ The detector sends one JSON text message per detection over `/ws/ingest`:
   "date":        "2026_10_24",
   "time":        "19_34_41",
   "confidence":  0.91,
+  "description": "person fights with another person; weapon drawn",
+  "severity":    4,
+  "zone":        "RED",
   "filename":    "clip.webm",
   "video_b64":   "<base64 of the video file bytes>"
 }
 ```
 The server replies `{"ok": true, "id": "<detection id>"}`.
-`confidence` (Head A's max segment score) is optional.
+All of `confidence`, `description`, `severity`, and `zone` are **optional**
+(the Phase-2 detector sends them). `severity` from the model is on a 1–5 scale;
+the backend scales it to the app's 0–10 scale. The officials dashboard shows the
+`description` and `confidence`; the public feed never includes them.
 
 ---
 
@@ -228,7 +278,8 @@ The server replies `{"ok": true, "id": "<detection id>"}`.
 | `static/community.html`   | Public portal (Leaflet map + Chart.js)            |
 | `static/login.html`       | Officials login                                   |
 | `static/officials.html`   | Officials dashboard                               |
-| `revere_websocket_new.py` | **Current detector** — V-JEPA 2 + MIL heads + GUI |
+| `revere_websocket_camera.py` | **Newest detector** — V-JEPA 2 + zone/type/explanation (Phase 2) + GUI |
+| `revere_websocket_new.py` | Phase-1 detector — V-JEPA 2 + MIL heads + GUI     |
 | `revere_detector.py`      | Legacy detector — TensorFlow CNN + GUI            |
 | `revere_sender.py`        | Reusable detector helper (`send_detection`)       |
 | `send_test.py`            | Single-detection test client                      |
